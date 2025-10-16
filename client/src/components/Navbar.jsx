@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000');
+const socket = io('https://skillswap-1-1iic.onrender.com');
 
 function Navbar() {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ function Navbar() {
       if (parsedUser.avatar.startsWith('http')) {
         setAvatar(parsedUser.avatar);
       } else {
-        setAvatar(`http://localhost:5000/uploads/${parsedUser.avatar}`);
+        setAvatar(`https://skillswap-1-1iic.onrender.com/uploads/${parsedUser.avatar}`);
       }
     } else {
       setAvatar(`https://ui-avatars.com/api/?name=${encodeURIComponent(parsedUser?.name || 'P')}`);

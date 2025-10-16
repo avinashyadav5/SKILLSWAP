@@ -5,7 +5,7 @@ function UserReviews({ ratedId }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/rating/${ratedId}`)
+    fetch(`https://skillswap-1-1iic.onrender.com/api/rating/${ratedId}`)
       .then(res => res.json())
       .then(data => {
         setReviews(data);

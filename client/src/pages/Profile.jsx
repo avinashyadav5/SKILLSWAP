@@ -25,7 +25,7 @@ function Profile() {
     if (avatar.startsWith("http")) {
       return avatar;
     }
-    return `http://localhost:5000/uploads/${avatar}`;
+    return `https://skillswap-1-1iic.onrender.com/uploads/${avatar}`;
   };
 
   useEffect(() => {
@@ -33,7 +33,7 @@ function Profile() {
       setAvatarPreview(normalizeAvatarUrl(user.avatar, user.name));
 
       // Fetch subjects
-      fetch(`http://localhost:5000/api/user/${user.id}/subjects`)
+      fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}/subjects`)
         .then(res => res.json())
         .then(data => {
           setTeachSubjects(data.teachSubjects || []);
@@ -54,7 +54,7 @@ function Profile() {
     const formData = new FormData();
     formData.append('avatar', avatarFile);
 
-    const res = await fetch(`http://localhost:5000/api/user/avatar/${user.id}`, {
+    const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/avatar/${user.id}`, {
       method: 'POST',
       body: formData,
     });
@@ -70,7 +70,7 @@ function Profile() {
   };
 
   const handleRemoveAvatar = async () => {
-    const res = await fetch(`http://localhost:5000/api/user/avatar/${user.id}`, {
+    const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/avatar/${user.id}`, {
       method: 'DELETE',
     });
     if (res.ok) {
@@ -85,7 +85,7 @@ function Profile() {
   };
 
   const handleUpdateProfile = async () => {
-    const res = await fetch(`http://localhost:5000/api/user/${user.id}`, {
+    const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -100,18 +100,18 @@ function Profile() {
   const handleAddTeach = async () => {
     const subjectName = newTeachSubject.trim();
     if (!subjectName) return alert('Please enter a subject name.');
-    await fetch(`http://localhost:5000/api/user/${user.id}/teach`, {
+    await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}/teach`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subjectName }),
     });
-    const updatedSubjects = await fetch(`http://localhost:5000/api/user/${user.id}/subjects`).then(res => res.json());
+    const updatedSubjects = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}/subjects`).then(res => res.json());
     setTeachSubjects(updatedSubjects.teachSubjects || []);
     setNewTeachSubject('');
   };
 
   const handleRemoveTeach = async (subjectName) => {
-    await fetch(`http://localhost:5000/api/user/${user.id}/teach/${encodeURIComponent(subjectName)}`, {
+    await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}/teach/${encodeURIComponent(subjectName)}`, {
       method: 'DELETE'
     });
     setTeachSubjects(teachSubjects.filter(s => s !== subjectName));
@@ -120,18 +120,18 @@ function Profile() {
   const handleAddLearn = async () => {
     const subjectName = newLearnSubject.trim();
     if (!subjectName) return alert('Please enter a subject name.');
-    await fetch(`http://localhost:5000/api/user/${user.id}/learn`, {
+    await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}/learn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subjectName }),
     });
-    const updatedSubjects = await fetch(`http://localhost:5000/api/user/${user.id}/subjects`).then(res => res.json());
+    const updatedSubjects = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}/subjects`).then(res => res.json());
     setLearnSubjects(updatedSubjects.learnSubjects || []);
     setNewLearnSubject('');
   };
 
   const handleRemoveLearn = async (subjectName) => {
-    await fetch(`http://localhost:5000/api/user/${user.id}/learn/${encodeURIComponent(subjectName)}`, {
+    await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${user.id}/learn/${encodeURIComponent(subjectName)}`, {
       method: 'DELETE'
     });
     setLearnSubjects(learnSubjects.filter(s => s !== subjectName));

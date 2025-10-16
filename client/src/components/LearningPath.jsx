@@ -17,7 +17,7 @@ export default function LearningPath({ subject }) {
     setLoading(true);
     setError(null);
 
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+    const apiUrl = import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
 
     fetch(`${apiUrl}/api/learning-path/${subject}`)
       .then((res) => {

@@ -25,7 +25,7 @@ function AdminDashboard() {
     }
 
     axios
-      .get('http://localhost:5000/api/admin/users', {
+      .get('https://skillswap-1-1iic.onrender.com/api/admin/users', {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
@@ -65,7 +65,7 @@ function AdminDashboard() {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
-        await axios.delete(`http://localhost:5000/api/user/${id}`);
+        await axios.delete(`https://skillswap-1-1iic.onrender.com/api/user/${id}`);
         setUsers(users.filter((u) => u.id !== id));
       } catch (err) {
         alert('Error deleting user');
@@ -76,7 +76,7 @@ function AdminDashboard() {
   const toggleAdmin = async (id) => {
     try {
       await axios.put(
-        `http://localhost:5000/api/admin/toggle/${id}`,
+        `https://skillswap-1-1iic.onrender.com/api/admin/toggle/${id}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -145,7 +145,7 @@ function AdminDashboard() {
                 <img
                   src={
                     u.avatar
-                      ? `http://localhost:5000/uploads/${u.avatar}`
+                      ? `https://skillswap-1-1iic.onrender.com/uploads/${u.avatar}`
                       : 'https://via.placeholder.com/80'
                   }
                   alt={u.name}

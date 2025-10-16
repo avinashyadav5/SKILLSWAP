@@ -12,7 +12,7 @@ export default function LearningResources({ subject }) {
 
     // Use proxy-safe fetch (relative) if vite.config.js proxy is set
     const apiUrl =
-      import.meta.env.VITE_API_URL || "http://localhost:5000";
+      import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
 
     fetch(`${apiUrl}/api/recommendations/learn/${subject}`)
       .then((res) => {

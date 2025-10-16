@@ -9,7 +9,7 @@ function RateUser({ raterId, ratedId }) {
   const [review, setReview] = useState('');
 
   const submit = async () => {
-    await fetch('http://localhost:5000/api/rating', {
+    await fetch('https://skillswap-1-1iic.onrender.com/api/rating', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raterId, ratedId, stars, review }),

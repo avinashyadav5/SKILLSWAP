@@ -58,7 +58,7 @@ function Home() {
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/rating/with-users');
+        const res = await fetch('https://skillswap-1-1iic.onrender.com/api/rating/with-users');
         const data = await res.json();
         if (Array.isArray(data)) setReviews(data);
       } catch (err) {
@@ -72,7 +72,7 @@ function Home() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/stats');
+        const res = await fetch('https://skillswap-1-1iic.onrender.com/api/stats');
         const data = await res.json();
         setStats(data);
       } catch (err) {

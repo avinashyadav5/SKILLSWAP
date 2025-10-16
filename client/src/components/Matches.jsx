@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 function toAvatarUrl(avatar) {
   if (!avatar) return null;
   if (avatar.startsWith("http://") || avatar.startsWith("https://")) return avatar;
-  return `http://localhost:5000/uploads/${avatar}`;
+  return `https://skillswap-1-1iic.onrender.com/uploads/${avatar}`;
 }
 
 function initials(name) {
@@ -25,7 +25,7 @@ export default function Matches({ userId, token }) {
     async function fetchMatches() {
       try {
         setLoading(true);
-        const res = await fetch(`http://localhost:5000/api/match/${userId}`, {
+        const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/match/${userId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Failed to fetch matches");

@@ -32,13 +32,13 @@ function Dashboard() {
     // ✅ Fetch full user profile (including teach + learn arrays)
     async function fetchUserProfile() {
       try {
-        const res = await fetch(`http://localhost:5000/api/user/${parsedUser.id}`);
+        const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${parsedUser.id}`);
         if (!res.ok) throw new Error("Failed to fetch user profile");
         const fullUser = await res.json();
         setUser(fullUser);
 
         // Fetch rating separately
-        const ratingRes = await fetch(`http://localhost:5000/api/rating/average/${parsedUser.id}`);
+        const ratingRes = await fetch(`https://skillswap-1-1iic.onrender.com/api/rating/average/${parsedUser.id}`);
         if (!ratingRes.ok) throw new Error("Failed to fetch average rating");
         const ratingData = await ratingRes.json();
         setAvgRating(ratingData.avgStars || 0);

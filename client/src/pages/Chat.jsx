@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar';
 import EmojiPicker from 'emoji-picker-react';
 import UserReviews from '../components/UserReviews';
 
-const socket = io('http://localhost:5000');
+const socket = io('https://skillswap-1-1iic.onrender.com');
 
 function Chat() {
   const { userId } = useParams();
@@ -29,7 +29,7 @@ function Chat() {
     const fetchUser = async () => {
       try {
         setLoadingUser(true);
-        const res = await fetch(`http://localhost:5000/api/user/${userId}`);
+        const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${userId}`);
         if (!res.ok) throw new Error(`Failed with status ${res.status}`);
         setOtherUser(await res.json());
       } catch {
@@ -77,7 +77,7 @@ function Chat() {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/messages/${myId}/${otherId}`);
+        const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/messages/${myId}/${otherId}`);
         const data = await res.json();
         const formatted = data.map((msg) => ({
           ...msg,
@@ -121,7 +121,7 @@ function Chat() {
 
     selectedImages.forEach((img) => formData.append('images', img));
 
-    await fetch('http://localhost:5000/api/messages', { method: 'POST', body: formData });
+    await fetch('https://skillswap-1-1iic.onrender.com/api/messages', { method: 'POST', body: formData });
 
     setText('');
     setSelectedImages([]);
@@ -138,7 +138,7 @@ function Chat() {
 
   const startVideoCall = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/video/create-room', { method: 'POST' });
+      const res = await fetch('https://skillswap-1-1iic.onrender.com/api/video/create-room', { method: 'POST' });
       const data = await res.json();
       if (data.url) window.open(data.url, '_blank');
     } catch {
@@ -219,7 +219,7 @@ function Chat() {
                   {m.images && m.images.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {m.images.map((img, idx2) => {
-                        const fullUrl = `http://localhost:5000/uploads/chat/${img}`;
+                        const fullUrl = `https://skillswap-1-1iic.onrender.com/uploads/chat/${img}`;
                         return (
                           <img
                             key={idx2}
@@ -227,7 +227,7 @@ function Chat() {
                             alt="chat-img"
                             className="w-24 h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
                             onClick={() =>
-                              setLightbox({ open: true, images: m.images.map((im) => `http://localhost:5000/uploads/chat/${im}`), index: idx2 })
+                              setLightbox({ open: true, images: m.images.map((im) => `https://skillswap-1-1iic.onrender.com/uploads/chat/${im}`), index: idx2 })
                             }
                           />
                         );

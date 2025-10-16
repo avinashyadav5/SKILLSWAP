@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Particles from "react-tsparticles";
 import { loadSlim } from "tsparticles-slim";
 
-const socket = io("http://localhost:5000");
+const socket = io("https://skillswap-1-1iic.onrender.com");
 
 export default function Notification({ userId }) {
   const [notifications, setNotifications] = useState([]);
