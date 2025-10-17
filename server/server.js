@@ -6,6 +6,7 @@ const path = require('path');
 const { Server } = require('socket.io');
 const sequelize = require('./config/db');
 
+// Import routes
 const statsRoute = require('./routes/stats');
 const chatRoutes = require('./routes/chatRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -25,10 +26,22 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-// Enable CORS with your frontend origin and allow credentials
+// ✅ CORS setup for both localhost & Vercel
+const allowedOrigins = [
+  'http://localhost:5173', // Local dev
+  'https://skillswap-app-sigma.vercel.app' // Your Vercel frontend
+];
+
 app.use(
   cors({
-    origin: 'http://localhost:5173',
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log('❌ Blocked by CORS:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
@@ -36,8 +49,7 @@ app.use(
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Route registrations (order matters)
-
+// ✅ Route registrations
 app.use('/api/chatbot', chatbotRoute);
 app.use('/api/learning-path', learningPathRoutes);
 app.use('/api/subjects', subjectsRouter);
@@ -53,20 +65,18 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/stats', statsRoute);
 app.use('/api/study-buddy', studyBuddyRoutes);
 
+// ✅ Health check endpoint
+app.get('/', (req, res) => res.send('✅ SkillSwap Backend is running!'));
 
-// Basic health check
-app.get('/', (req, res) => res.send('SkillSwap Backend is running!'));
-
-// Socket.IO Setup
+// ✅ Socket.IO setup with same CORS origins
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
   },
 });
 
 global.io = io;
-
 let onlineUsers = {};
 
 io.on('connection', socket => {
@@ -104,9 +114,11 @@ io.on('connection', socket => {
   });
 });
 
-// Sequelize sync and start server
+// ✅ Start the server
+const PORT = process.env.PORT || 5000;
+
 sequelize.sync({ alter: true }).then(() => {
-  server.listen(5000, () => {
-    console.log('🚀 Server running at http://localhost:5000');
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
   });
 });
