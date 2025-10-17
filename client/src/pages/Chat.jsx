@@ -50,11 +50,10 @@ function Chat() {
     fetchUser();
   }, [userId]);
 
-  // ✅ Socket setup for messages + WebRTC
+  // ✅ Socket setup
   useEffect(() => {
     socket.emit("join_room", myId);
 
-    // Messages
     socket.on("receive_message", (msg) => {
       const sender = parseInt(msg.senderId);
       const receiver = parseInt(msg.receiverId);
@@ -73,7 +72,6 @@ function Chat() {
 
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
-    // --- WebRTC signaling ---
     socket.on("webrtc_offer", async ({ from, offer }) => {
       if (!peerRef.current) await initWebRTCConnection(from, true, offer);
     });
@@ -101,7 +99,7 @@ function Chat() {
     };
   }, [myId, otherId]);
 
-  // ✅ Initialize WebRTC connection
+  // ✅ WebRTC setup
   const initWebRTCConnection = async (from, isReceiver = false, remoteOffer = null) => {
     setInCall(true);
     peerRef.current = new RTCPeerConnection(RTC_CONFIG);
@@ -135,7 +133,7 @@ function Chat() {
     }
   };
 
-  // ✅ Load chat history
+  // ✅ Fetch chat history
   useEffect(() => {
     const fetchMessages = async () => {
       try {
@@ -191,10 +189,12 @@ function Chat() {
     }
   };
 
-  // ✅ Emoji picker
-  const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
+  // ✅ Emoji picker click
+  const onEmojiClick = (emojiData) => {
+    setText((prev) => prev + emojiData.emoji);
+    setShowEmojiPicker(false); // ✅ Auto-close after choosing
+  };
 
-  // ✅ Group messages by date
   const groupedByDate = messages.reduce((acc, msg) => {
     const date = new Date(msg.createdAt).toLocaleDateString();
     acc[date] = acc[date] || [];
@@ -202,7 +202,6 @@ function Chat() {
     return acc;
   }, {});
 
-  // ✅ End call
   const endCall = () => {
     peerRef.current?.close();
     peerRef.current = null;
@@ -212,9 +211,9 @@ function Chat() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white">
       <Navbar />
-      <div className="max-w-2xl mx-auto py-16 px-4">
+      <div className="w-full max-w-2xl mx-auto sm:px-4 px-2 py-16">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           {otherUser?.avatar && (
             <img
               src={
@@ -227,8 +226,8 @@ function Chat() {
             />
           )}
           <div>
-            <h2 className="text-2xl font-bold">
-              Chat with {loadingUser ? "Loading..." : otherUser?.name || "Unknown User"}
+            <h2 className="text-xl sm:text-2xl font-bold">
+              Chat with {loadingUser ? "Loading..." : otherUser?.name || "Unknown"}
             </h2>
             {otherUser && (
               <p className="text-sm text-gray-300">
@@ -238,11 +237,9 @@ function Chat() {
             )}
           </div>
           <span
-            className={
-              onlineUsers.includes(otherId)
-                ? "text-green-400 ml-auto"
-                : "text-red-400 ml-auto"
-            }
+            className={`ml-auto ${
+              onlineUsers.includes(otherId) ? "text-green-400" : "text-red-400"
+            }`}
           >
             {onlineUsers.includes(otherId) ? "Online" : "Offline"}
           </span>
@@ -250,7 +247,7 @@ function Chat() {
 
         {/* Messages */}
         <div
-          className="h-96 overflow-y-auto bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/20 mb-4"
+          className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
@@ -260,7 +257,7 @@ function Chat() {
               {msgs.map((m, i) => (
                 <div
                   key={i}
-                  className={`my-2 max-w-xs p-2 rounded-lg ${
+                  className={`my-2 max-w-[80%] sm:max-w-xs p-2 rounded-lg ${
                     m.fromSelf
                       ? "bg-green-600 text-white ml-auto text-right"
                       : "bg-gray-300 text-black mr-auto text-left"
@@ -276,7 +273,7 @@ function Chat() {
                             key={idx2}
                             src={fullUrl}
                             alt="chat-img"
-                            className="w-24 h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                            className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
                             onClick={() =>
                               setLightbox({
                                 open: true,
@@ -300,20 +297,20 @@ function Chat() {
 
         {/* Selected images preview */}
         {selectedImages.length > 0 && (
-          <div className="flex gap-2 mb-2">
+          <div className="flex gap-2 mb-2 flex-wrap">
             {selectedImages.map((file, idx) => (
               <img
                 key={idx}
                 src={URL.createObjectURL(file)}
                 alt="preview"
-                className="w-16 h-16 object-cover rounded"
+                className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded"
               />
             ))}
           </div>
         )}
 
-        {/* Input */}
-        <div className="flex gap-2.5 items-center mb-4">
+        {/* Input Section */}
+        <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg">
           <button
             onClick={() => initWebRTCConnection(otherId)}
             className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full"
@@ -330,21 +327,27 @@ function Chat() {
           </button>
 
           {showEmojiPicker && (
-            <div className="absolute z-10 bottom-24 left-8">
+            <div className="absolute z-10 bottom-24 left-4 sm:left-8 scale-90 sm:scale-100">
               <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
             </div>
           )}
 
-          <input type="file" multiple onChange={handleImageChange} className="text-sm text-white" />
+          <input
+            type="file"
+            multiple
+            onChange={handleImageChange}
+            className="text-sm text-white"
+          />
 
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            className="flex-grow p-2 rounded-md text-black"
+            className="flex-grow p-2 rounded-md text-black min-w-[150px]"
             placeholder="Type your message..."
           />
+
           <button
             onClick={sendMessage}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
@@ -353,15 +356,18 @@ function Chat() {
           </button>
         </div>
 
-        {/* ✅ Video Call Window */}
+        {/* ✅ Video Call */}
         {inCall && (
           <div className="flex flex-col items-center mt-4">
             <h3 className="text-lg font-semibold mb-2">🎥 Live Video Call</h3>
-            <div className="flex gap-4">
+            <div className="flex gap-4 flex-wrap justify-center">
               <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
               <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
             </div>
-            <button onClick={endCall} className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+            <button
+              onClick={endCall}
+              className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
+            >
               End Call
             </button>
           </div>
