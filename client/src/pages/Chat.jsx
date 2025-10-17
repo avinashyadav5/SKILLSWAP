@@ -4,14 +4,10 @@ import io from "socket.io-client";
 import Navbar from "../components/Navbar";
 import EmojiPicker from "emoji-picker-react";
 import UserReviews from "../components/UserReviews";
+import { RTC_CONFIG } from "../utils/webrtc";
 
-// ✅ Dynamic backend URL from environment
 const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
-// ✅ Connect socket dynamically
-const socket = io(BACKEND_URL, {
-  transports: ["websocket", "polling"],
-});
+const socket = io(BACKEND_URL, { transports: ["websocket", "polling"] });
 
 function Chat() {
   const { userId } = useParams();
@@ -28,8 +24,12 @@ function Chat() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
+  const [inCall, setInCall] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const peerRef = useRef(null);
 
   // ✅ Fetch user info
   useEffect(() => {
@@ -50,15 +50,15 @@ function Chat() {
     fetchUser();
   }, [userId]);
 
-  // ✅ Socket listeners
+  // ✅ Socket setup for messages + WebRTC
   useEffect(() => {
     socket.emit("join_room", myId);
 
-    const handleReceive = (msg) => {
+    // Messages
+    socket.on("receive_message", (msg) => {
       const sender = parseInt(msg.senderId);
       const receiver = parseInt(msg.receiverId);
       const fromSelf = sender === myId;
-
       const isRelevant =
         (sender === myId && receiver === otherId) ||
         (sender === otherId && receiver === myId);
@@ -69,18 +69,73 @@ function Chat() {
         if (prev.find((m) => m.id === msg.id)) return prev;
         return [...prev, { ...msg, fromSelf, images: msg.images || [] }];
       });
-    };
+    });
 
-    socket.on("receive_message", handleReceive);
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
+    // --- WebRTC signaling ---
+    socket.on("webrtc_offer", async ({ from, offer }) => {
+      if (!peerRef.current) await initWebRTCConnection(from, true, offer);
+    });
+
+    socket.on("webrtc_answer", async ({ answer }) => {
+      if (peerRef.current) {
+        await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    });
+
+    socket.on("webrtc_ice_candidate", async ({ candidate }) => {
+      try {
+        await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error("Error adding ICE candidate:", err);
+      }
+    });
+
     return () => {
-      socket.off("receive_message", handleReceive);
+      socket.off("receive_message");
       socket.off("online_users");
+      socket.off("webrtc_offer");
+      socket.off("webrtc_answer");
+      socket.off("webrtc_ice_candidate");
     };
   }, [myId, otherId]);
 
-  // ✅ Load message history
+  // ✅ Initialize WebRTC connection
+  const initWebRTCConnection = async (from, isReceiver = false, remoteOffer = null) => {
+    setInCall(true);
+    peerRef.current = new RTCPeerConnection(RTC_CONFIG);
+
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideoRef.current.srcObject = stream;
+    stream.getTracks().forEach((track) => peerRef.current.addTrack(track, stream));
+
+    peerRef.current.ontrack = (event) => {
+      remoteVideoRef.current.srcObject = event.streams[0];
+    };
+
+    peerRef.current.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("webrtc_ice_candidate", {
+          to: isReceiver ? from : otherId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    if (isReceiver && remoteOffer) {
+      await peerRef.current.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+      const answer = await peerRef.current.createAnswer();
+      await peerRef.current.setLocalDescription(answer);
+      socket.emit("webrtc_answer", { to: from, answer });
+    } else {
+      const offer = await peerRef.current.createOffer();
+      await peerRef.current.setLocalDescription(offer);
+      socket.emit("webrtc_offer", { to: otherId, offer, from: myId });
+    }
+  };
+
+  // ✅ Load chat history
   useEffect(() => {
     const fetchMessages = async () => {
       try {
@@ -128,17 +183,16 @@ function Chat() {
       formData.append("text", text);
       selectedImages.forEach((img) => formData.append("images", img));
 
-      await fetch(`${BACKEND_URL}/api/messages`, {
-        method: "POST",
-        body: formData,
-      });
-
+      await fetch(`${BACKEND_URL}/api/messages`, { method: "POST", body: formData });
       setText("");
       setSelectedImages([]);
     } catch (err) {
       console.error("Error sending message:", err);
     }
   };
+
+  // ✅ Emoji picker
+  const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
 
   // ✅ Group messages by date
   const groupedByDate = messages.reduce((acc, msg) => {
@@ -148,45 +202,12 @@ function Chat() {
     return acc;
   }, {});
 
-  // ✅ Emoji picker
-  const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
-
-  // ✅ Video call
-  const startVideoCall = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/video/create-room`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (data.url) window.open(data.url, "_blank");
-    } catch {
-      alert("Failed to start video call");
-    }
+  // ✅ End call
+  const endCall = () => {
+    peerRef.current?.close();
+    peerRef.current = null;
+    setInCall(false);
   };
-
-  // ✅ Lightbox navigation
-  useEffect(() => {
-    if (!lightbox.open) return;
-
-    const handleKey = (e) => {
-      if (e.key === "Escape") setLightbox({ ...lightbox, open: false });
-      if (e.key === "ArrowRight") {
-        setLightbox((prev) => ({
-          ...prev,
-          index: (prev.index + 1) % prev.images.length,
-        }));
-      }
-      if (e.key === "ArrowLeft") {
-        setLightbox((prev) => ({
-          ...prev,
-          index: (prev.index - 1 + prev.images.length) % prev.images.length,
-        }));
-      }
-    };
-
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [lightbox]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white">
@@ -294,7 +315,7 @@ function Chat() {
         {/* Input */}
         <div className="flex gap-2.5 items-center mb-4">
           <button
-            onClick={startVideoCall}
+            onClick={() => initWebRTCConnection(otherId)}
             className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full"
             title="Start Video Call"
           >
@@ -314,12 +335,7 @@ function Chat() {
             </div>
           )}
 
-          <input
-            type="file"
-            multiple
-            onChange={handleImageChange}
-            className="text-sm text-white"
-          />
+          <input type="file" multiple onChange={handleImageChange} className="text-sm text-white" />
 
           <input
             type="text"
@@ -336,6 +352,20 @@ function Chat() {
             Send
           </button>
         </div>
+
+        {/* ✅ Video Call Window */}
+        {inCall && (
+          <div className="flex flex-col items-center mt-4">
+            <h3 className="text-lg font-semibold mb-2">🎥 Live Video Call</h3>
+            <div className="flex gap-4">
+              <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
+              <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
+            </div>
+            <button onClick={endCall} className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+              End Call
+            </button>
+          </div>
+        )}
 
         <UserReviews ratedId={otherId} />
       </div>
