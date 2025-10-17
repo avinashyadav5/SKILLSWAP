@@ -30,7 +30,12 @@ function Chat() {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerRef = useRef(null);
-  const pendingCandidates = useRef([]); // ✅ Queue ICE candidates
+  const pendingCandidates = useRef([]);
+
+  // ⭐ Review-related states
+  const [rating, setRating] = useState(0);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   // ✅ Fetch user info
   useEffect(() => {
@@ -73,17 +78,15 @@ function Chat() {
 
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
-    // ✅ Handle offer
+    // ✅ WebRTC events
     socket.on("webrtc_offer", async ({ from, offer }) => {
       if (!peerRef.current) await initWebRTCConnection(from, true, offer);
     });
 
-    // ✅ Handle answer
     socket.on("webrtc_answer", async ({ answer }) => {
       if (peerRef.current) {
         await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
 
-        // Add queued ICE candidates once remote description is set
         while (pendingCandidates.current.length) {
           const c = pendingCandidates.current.shift();
           await peerRef.current.addIceCandidate(c);
@@ -91,7 +94,6 @@ function Chat() {
       }
     });
 
-    // ✅ Handle ICE
     socket.on("webrtc_ice_candidate", async ({ candidate }) => {
       if (!peerRef.current) return;
       try {
@@ -100,7 +102,6 @@ function Chat() {
           await peerRef.current.addIceCandidate(iceCandidate);
         } else {
           pendingCandidates.current.push(iceCandidate);
-          console.log("Queued ICE candidate (waiting for remote description)");
         }
       } catch (err) {
         console.error("Error adding ICE candidate:", err);
@@ -138,11 +139,6 @@ function Chat() {
       }
     };
 
-    // ✅ For debugging
-    peerRef.current.oniceconnectionstatechange = () => {
-      console.log("ICE state:", peerRef.current.iceConnectionState);
-    };
-
     if (isReceiver && remoteOffer) {
       await peerRef.current.setRemoteDescription(new RTCSessionDescription(remoteOffer));
       const answer = await peerRef.current.createAnswer();
@@ -178,20 +174,6 @@ function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ✅ Image handling
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files);
-    setSelectedImages((prev) => [...prev, ...files]);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files);
-    setSelectedImages((prev) => [...prev, ...files]);
-  };
-
-  const handleDragOver = (e) => e.preventDefault();
-
   // ✅ Send message
   const sendMessage = async () => {
     if (!text.trim() && selectedImages.length === 0) return;
@@ -206,14 +188,35 @@ function Chat() {
       await fetch(`${BACKEND_URL}/api/messages`, { method: "POST", body: formData });
       setText("");
       setSelectedImages([]);
-      setShowEmojiPicker(false); // ✅ closes picker after sending
+      setShowEmojiPicker(false);
     } catch (err) {
       console.error("Error sending message:", err);
     }
   };
 
-  const onEmojiClick = (emojiData) => {
-    setText((prev) => prev + emojiData.emoji);
+  // ✅ Submit Review
+  const submitReview = async () => {
+    if (rating === 0 || reviewText.trim() === "") return alert("Please rate and comment.");
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/rating`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ratedId: otherId,
+          reviewerId: myId,
+          rating,
+          comment: reviewText,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to submit review");
+      setReviewSubmitted(true);
+      setRating(0);
+      setReviewText("");
+    } catch (err) {
+      console.error("Review submission failed:", err);
+      alert("Error submitting review.");
+    }
   };
 
   const groupedByDate = messages.reduce((acc, msg) => {
@@ -228,6 +231,8 @@ function Chat() {
     peerRef.current = null;
     setInCall(false);
   };
+
+  const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white">
@@ -269,8 +274,6 @@ function Chat() {
         {/* Messages */}
         <div
           className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4"
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
         >
           {Object.entries(groupedByDate).map(([date, msgs], idx) => (
             <div key={idx}>
@@ -287,26 +290,23 @@ function Chat() {
                   {m.text && <p>{m.text}</p>}
                   {m.images?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {m.images.map((img, idx2) => {
-                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
-                        return (
-                          <img
-                            key={idx2}
-                            src={fullUrl}
-                            alt="chat-img"
-                            className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
-                            onClick={() =>
-                              setLightbox({
-                                open: true,
-                                images: m.images.map(
-                                  (im) => `${BACKEND_URL}/uploads/chat/${im}`
-                                ),
-                                index: idx2,
-                              })
-                            }
-                          />
-                        );
-                      })}
+                      {m.images.map((img, idx2) => (
+                        <img
+                          key={idx2}
+                          src={`${BACKEND_URL}/uploads/chat/${img}`}
+                          alt="chat-img"
+                          className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                          onClick={() =>
+                            setLightbox({
+                              open: true,
+                              images: m.images.map(
+                                (im) => `${BACKEND_URL}/uploads/chat/${im}`
+                              ),
+                              index: idx2,
+                            })
+                          }
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
@@ -315,20 +315,6 @@ function Chat() {
           ))}
           <div ref={messagesEndRef} />
         </div>
-
-        {/* Selected images preview */}
-        {selectedImages.length > 0 && (
-          <div className="flex gap-2 mb-2 flex-wrap">
-            {selectedImages.map((file, idx) => (
-              <img
-                key={idx}
-                src={URL.createObjectURL(file)}
-                alt="preview"
-                className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded"
-              />
-            ))}
-          </div>
-        )}
 
         {/* Input Section */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
@@ -340,7 +326,6 @@ function Chat() {
             📹
           </button>
 
-          {/* 😀 Emoji Toggle */}
           <button
             onClick={() => setShowEmojiPicker((prev) => !prev)}
             className="text-xl bg-white/20 p-2 rounded-lg"
@@ -349,32 +334,24 @@ function Chat() {
           </button>
 
           {showEmojiPicker && (
-            <div className="absolute z-10 bottom-20 left-4 sm:left-8 scale-90 sm:scale-100">
+            <div className="absolute z-10 bottom-20 left-4 sm:left-8">
               <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
             </div>
           )}
 
-          <input type="file" multiple onChange={handleImageChange} className="text-sm text-white" />
+          <input type="file" multiple onChange={(e) => setSelectedImages([...e.target.files])} className="text-sm text-white" />
 
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                sendMessage();
-                setShowEmojiPicker(false);
-              }
-            }}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             className="flex-grow p-2 rounded-md text-black min-w-[150px]"
             placeholder="Type your message..."
           />
 
           <button
-            onClick={() => {
-              sendMessage();
-              setShowEmojiPicker(false);
-            }}
+            onClick={sendMessage}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
           >
             Send
@@ -395,7 +372,48 @@ function Chat() {
           </div>
         )}
 
+        {/* Existing Reviews */}
         <UserReviews ratedId={otherId} />
+
+        {/* ⭐ Write Review Section */}
+        <div className="mt-6 bg-white/10 p-4 rounded-xl border border-white/20">
+          <h3 className="text-lg font-semibold mb-2">Write a Review for {otherUser?.name}</h3>
+
+          {!reviewSubmitted ? (
+            <>
+              <div className="flex gap-1 mb-3">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <span
+                    key={star}
+                    onClick={() => setRating(star)}
+                    className={`cursor-pointer text-2xl transition ${
+                      star <= rating ? "text-yellow-400" : "text-gray-400"
+                    }`}
+                  >
+                    ★
+                  </span>
+                ))}
+              </div>
+
+              <textarea
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                placeholder="Share your experience..."
+                className="w-full p-2 rounded text-black mb-3"
+                rows={3}
+              ></textarea>
+
+              <button
+                onClick={submitReview}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
+              >
+                Submit Review
+              </button>
+            </>
+          ) : (
+            <p className="text-green-400 font-medium">✅ Thanks! Your review has been submitted.</p>
+          )}
+        </div>
       </div>
 
       {/* ✅ Lightbox */}
@@ -409,30 +427,6 @@ function Chat() {
             alt="Full view"
             className="max-h-[90%] max-w-[90%] rounded-lg"
           />
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightbox((prev) => ({
-                ...prev,
-                index: (prev.index - 1 + prev.images.length) % prev.images.length,
-              }));
-            }}
-            className="absolute left-8 text-white text-3xl font-bold"
-          >
-            ⬅
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightbox((prev) => ({
-                ...prev,
-                index: (prev.index + 1) % prev.images.length,
-              }));
-            }}
-            className="absolute right-8 text-white text-3xl font-bold"
-          >
-            ➡
-          </button>
         </div>
       )}
     </div>
