@@ -30,6 +30,7 @@ function Chat() {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerRef = useRef(null);
+  const pendingCandidates = useRef([]); // ✅ Queue ICE candidates
 
   // ✅ Fetch user info
   useEffect(() => {
@@ -72,19 +73,35 @@ function Chat() {
 
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
+    // ✅ Handle offer
     socket.on("webrtc_offer", async ({ from, offer }) => {
       if (!peerRef.current) await initWebRTCConnection(from, true, offer);
     });
 
+    // ✅ Handle answer
     socket.on("webrtc_answer", async ({ answer }) => {
       if (peerRef.current) {
         await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+
+        // Add queued ICE candidates once remote description is set
+        while (pendingCandidates.current.length) {
+          const c = pendingCandidates.current.shift();
+          await peerRef.current.addIceCandidate(c);
+        }
       }
     });
 
+    // ✅ Handle ICE
     socket.on("webrtc_ice_candidate", async ({ candidate }) => {
+      if (!peerRef.current) return;
       try {
-        await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        const iceCandidate = new RTCIceCandidate(candidate);
+        if (peerRef.current.remoteDescription) {
+          await peerRef.current.addIceCandidate(iceCandidate);
+        } else {
+          pendingCandidates.current.push(iceCandidate);
+          console.log("Queued ICE candidate (waiting for remote description)");
+        }
       } catch (err) {
         console.error("Error adding ICE candidate:", err);
       }
@@ -119,6 +136,11 @@ function Chat() {
           candidate: event.candidate,
         });
       }
+    };
+
+    // ✅ For debugging
+    peerRef.current.oniceconnectionstatechange = () => {
+      console.log("ICE state:", peerRef.current.iceConnectionState);
     };
 
     if (isReceiver && remoteOffer) {
@@ -190,7 +212,6 @@ function Chat() {
     }
   };
 
-  // ✅ Emoji picker click (stays open)
   const onEmojiClick = (emojiData) => {
     setText((prev) => prev + emojiData.emoji);
   };
@@ -321,7 +342,7 @@ function Chat() {
 
           {/* 😀 Emoji Toggle */}
           <button
-            onClick={() => setShowEmojiPicker((prev) => !prev)} // ✅ toggle open/close
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
             className="text-xl bg-white/20 p-2 rounded-lg"
           >
             😀
@@ -333,12 +354,7 @@ function Chat() {
             </div>
           )}
 
-          <input
-            type="file"
-            multiple
-            onChange={handleImageChange}
-            className="text-sm text-white"
-          />
+          <input type="file" multiple onChange={handleImageChange} className="text-sm text-white" />
 
           <input
             type="text"
@@ -347,7 +363,7 @@ function Chat() {
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 sendMessage();
-                setShowEmojiPicker(false); // ✅ closes picker after sending
+                setShowEmojiPicker(false);
               }
             }}
             className="flex-grow p-2 rounded-md text-black min-w-[150px]"
@@ -357,7 +373,7 @@ function Chat() {
           <button
             onClick={() => {
               sendMessage();
-              setShowEmojiPicker(false); // ✅ closes picker after sending
+              setShowEmojiPicker(false);
             }}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
           >
@@ -373,10 +389,7 @@ function Chat() {
               <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
               <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
             </div>
-            <button
-              onClick={endCall}
-              className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
-            >
+            <button onClick={endCall} className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
               End Call
             </button>
           </div>
