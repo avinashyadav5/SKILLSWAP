@@ -1,19 +1,25 @@
-import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
-import io from 'socket.io-client';
-import Navbar from '../components/Navbar';
-import EmojiPicker from 'emoji-picker-react';
-import UserReviews from '../components/UserReviews';
+import { useEffect, useState, useRef } from "react";
+import { useParams } from "react-router-dom";
+import io from "socket.io-client";
+import Navbar from "../components/Navbar";
+import EmojiPicker from "emoji-picker-react";
+import UserReviews from "../components/UserReviews";
 
-const socket = io('https://skillswap-1-1iic.onrender.com');
+// ✅ Dynamic backend URL from environment
+const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+// ✅ Connect socket dynamically
+const socket = io(BACKEND_URL, {
+  transports: ["websocket", "polling"],
+});
 
 function Chat() {
   const { userId } = useParams();
-  const me = JSON.parse(localStorage.getItem('user'));
-  const myId = parseInt(me.id);
+  const me = JSON.parse(localStorage.getItem("user"));
+  const myId = parseInt(me?.id);
   const otherId = parseInt(userId);
 
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const [otherUser, setOtherUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
@@ -21,7 +27,8 @@ function Chat() {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
-  const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 }); // ✅ NEW
+  const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
+
   const messagesEndRef = useRef(null);
 
   // ✅ Fetch user info
@@ -29,11 +36,13 @@ function Chat() {
     const fetchUser = async () => {
       try {
         setLoadingUser(true);
-        const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${userId}`);
+        const res = await fetch(`${BACKEND_URL}/api/user/${userId}`);
         if (!res.ok) throw new Error(`Failed with status ${res.status}`);
-        setOtherUser(await res.json());
-      } catch {
-        setUserError('Could not load user info');
+        const data = await res.json();
+        setOtherUser(data);
+      } catch (err) {
+        console.error(err);
+        setUserError("Could not load user info");
       } finally {
         setLoadingUser(false);
       }
@@ -43,7 +52,7 @@ function Chat() {
 
   // ✅ Socket listeners
   useEffect(() => {
-    socket.emit('join_room', myId);
+    socket.emit("join_room", myId);
 
     const handleReceive = (msg) => {
       const sender = parseInt(msg.senderId);
@@ -62,22 +71,20 @@ function Chat() {
       });
     };
 
-    const handleOnline = (list) => setOnlineUsers(list.map(Number));
-
-    socket.on('receive_message', handleReceive);
-    socket.on('online_users', handleOnline);
+    socket.on("receive_message", handleReceive);
+    socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
     return () => {
-      socket.off('receive_message', handleReceive);
-      socket.off('online_users', handleOnline);
+      socket.off("receive_message", handleReceive);
+      socket.off("online_users");
     };
   }, [myId, otherId]);
 
-  // ✅ Load history
+  // ✅ Load message history
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/messages/${myId}/${otherId}`);
+        const res = await fetch(`${BACKEND_URL}/api/messages/${myId}/${otherId}`);
         const data = await res.json();
         const formatted = data.map((msg) => ({
           ...msg,
@@ -86,17 +93,17 @@ function Chat() {
         }));
         setMessages(formatted);
       } catch (err) {
-        console.error('❌ Failed to load messages:', err);
+        console.error("❌ Failed to load messages:", err);
       }
     };
     fetchMessages();
   }, [myId, otherId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ✅ Image upload
+  // ✅ Image handling
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     setSelectedImages((prev) => [...prev, ...files]);
@@ -114,19 +121,26 @@ function Chat() {
   const sendMessage = async () => {
     if (!text.trim() && selectedImages.length === 0) return;
 
-    const formData = new FormData();
-    formData.append('senderId', myId);
-    formData.append('receiverId', otherId);
-    formData.append('text', text);
+    try {
+      const formData = new FormData();
+      formData.append("senderId", myId);
+      formData.append("receiverId", otherId);
+      formData.append("text", text);
+      selectedImages.forEach((img) => formData.append("images", img));
 
-    selectedImages.forEach((img) => formData.append('images', img));
+      await fetch(`${BACKEND_URL}/api/messages`, {
+        method: "POST",
+        body: formData,
+      });
 
-    await fetch('https://skillswap-1-1iic.onrender.com/api/messages', { method: 'POST', body: formData });
-
-    setText('');
-    setSelectedImages([]);
+      setText("");
+      setSelectedImages([]);
+    } catch (err) {
+      console.error("Error sending message:", err);
+    }
   };
 
+  // ✅ Group messages by date
   const groupedByDate = messages.reduce((acc, msg) => {
     const date = new Date(msg.createdAt).toLocaleDateString();
     acc[date] = acc[date] || [];
@@ -134,31 +148,35 @@ function Chat() {
     return acc;
   }, {});
 
+  // ✅ Emoji picker
   const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
 
+  // ✅ Video call
   const startVideoCall = async () => {
     try {
-      const res = await fetch('https://skillswap-1-1iic.onrender.com/api/video/create-room', { method: 'POST' });
+      const res = await fetch(`${BACKEND_URL}/api/video/create-room`, {
+        method: "POST",
+      });
       const data = await res.json();
-      if (data.url) window.open(data.url, '_blank');
+      if (data.url) window.open(data.url, "_blank");
     } catch {
-      alert('Failed to start video call');
+      alert("Failed to start video call");
     }
   };
 
-  // ✅ Lightbox keyboard navigation
+  // ✅ Lightbox navigation
   useEffect(() => {
     if (!lightbox.open) return;
 
     const handleKey = (e) => {
-      if (e.key === 'Escape') setLightbox({ ...lightbox, open: false });
-      if (e.key === 'ArrowRight') {
+      if (e.key === "Escape") setLightbox({ ...lightbox, open: false });
+      if (e.key === "ArrowRight") {
         setLightbox((prev) => ({
           ...prev,
           index: (prev.index + 1) % prev.images.length,
         }));
       }
-      if (e.key === 'ArrowLeft') {
+      if (e.key === "ArrowLeft") {
         setLightbox((prev) => ({
           ...prev,
           index: (prev.index - 1 + prev.images.length) % prev.images.length,
@@ -166,8 +184,8 @@ function Chat() {
       }
     };
 
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
   }, [lightbox]);
 
   return (
@@ -177,23 +195,35 @@ function Chat() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           {otherUser?.avatar && (
-            <img src={otherUser.avatar} alt={otherUser.name} className="w-12 h-12 rounded-full" />
+            <img
+              src={
+                otherUser.avatar.startsWith("http")
+                  ? otherUser.avatar
+                  : `${BACKEND_URL}/uploads/${otherUser.avatar}`
+              }
+              alt={otherUser.name}
+              className="w-12 h-12 rounded-full"
+            />
           )}
           <div>
             <h2 className="text-2xl font-bold">
-              Chat with {loadingUser ? 'Loading...' : otherUser?.name || 'Unknown User'}
+              Chat with {loadingUser ? "Loading..." : otherUser?.name || "Unknown User"}
             </h2>
             {otherUser && (
               <p className="text-sm text-gray-300">
-                🎓 Teaches: {otherUser.teach?.join(', ') || 'None'} <br />
-                📖 Learns: {otherUser.learn?.join(', ') || 'None'}
+                🎓 Teaches: {otherUser.teach?.join(", ") || "None"} <br />
+                📖 Learns: {otherUser.learn?.join(", ") || "None"}
               </p>
             )}
           </div>
           <span
-            className={onlineUsers.includes(otherId) ? 'text-green-400 ml-auto' : 'text-red-400 ml-auto'}
+            className={
+              onlineUsers.includes(otherId)
+                ? "text-green-400 ml-auto"
+                : "text-red-400 ml-auto"
+            }
           >
-            {onlineUsers.includes(otherId) ? 'Online' : 'Offline'}
+            {onlineUsers.includes(otherId) ? "Online" : "Offline"}
           </span>
         </div>
 
@@ -211,15 +241,15 @@ function Chat() {
                   key={i}
                   className={`my-2 max-w-xs p-2 rounded-lg ${
                     m.fromSelf
-                      ? 'bg-green-600 text-white ml-auto text-right'
-                      : 'bg-gray-300 text-black mr-auto text-left'
+                      ? "bg-green-600 text-white ml-auto text-right"
+                      : "bg-gray-300 text-black mr-auto text-left"
                   }`}
                 >
                   {m.text && <p>{m.text}</p>}
-                  {m.images && m.images.length > 0 && (
+                  {m.images?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {m.images.map((img, idx2) => {
-                        const fullUrl = `https://skillswap-1-1iic.onrender.com/uploads/chat/${img}`;
+                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
                         return (
                           <img
                             key={idx2}
@@ -227,7 +257,13 @@ function Chat() {
                             alt="chat-img"
                             className="w-24 h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
                             onClick={() =>
-                              setLightbox({ open: true, images: m.images.map((im) => `https://skillswap-1-1iic.onrender.com/uploads/chat/${im}`), index: idx2 })
+                              setLightbox({
+                                open: true,
+                                images: m.images.map(
+                                  (im) => `${BACKEND_URL}/uploads/chat/${im}`
+                                ),
+                                index: idx2,
+                              })
                             }
                           />
                         );
@@ -278,13 +314,18 @@ function Chat() {
             </div>
           )}
 
-          <input type="file" multiple onChange={handleImageChange} className="text-sm text-white" />
+          <input
+            type="file"
+            multiple
+            onChange={handleImageChange}
+            className="text-sm text-white"
+          />
 
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             className="flex-grow p-2 rounded-md text-black"
             placeholder="Type your message..."
           />
@@ -299,7 +340,7 @@ function Chat() {
         <UserReviews ratedId={otherId} />
       </div>
 
-      {/* ✅ Lightbox modal with navigation */}
+      {/* ✅ Lightbox */}
       {lightbox.open && (
         <div
           className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
@@ -310,7 +351,6 @@ function Chat() {
             alt="Full view"
             className="max-h-[90%] max-w-[90%] rounded-lg"
           />
-          {/* Navigation arrows */}
           <button
             onClick={(e) => {
               e.stopPropagation();

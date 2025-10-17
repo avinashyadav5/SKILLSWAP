@@ -7,40 +7,55 @@ export default function LearningResources({ subject }) {
 
   useEffect(() => {
     if (!subject) return;
+
     setLoading(true);
     setError(null);
 
-    // Use proxy-safe fetch (relative) if vite.config.js proxy is set
+    // ✅ Use environment variable or fallback to deployed backend
     const apiUrl =
       import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
 
-    fetch(`${apiUrl}/api/recommendations/learn/${subject}`)
+    // ✅ Encode subject to handle spaces or special characters
+    fetch(`${apiUrl}/api/recommendations/learn/${encodeURIComponent(subject)}`)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch resources");
+        if (!res.ok) throw new Error("Failed to fetch learning resources");
         return res.json();
       })
       .then((data) => {
-        if (Array.isArray(data)) setResources(data);
-        else setResources([]);
+        if (Array.isArray(data) && data.length > 0) {
+          setResources(data);
+        } else {
+          setResources([]);
+        }
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        console.error("Learning Resources Fetch Error:", err);
+        setError("Unable to load resources. Please try again later.");
+      })
       .finally(() => setLoading(false));
   }, [subject]);
 
   if (!subject) return null;
 
   return (
-    <div className="bg-white/10 rounded-lg p-4 mb-8">
-      <h2 className="font-bold mb-2 text-lg text-white">
-        Top resources for learning {subject}
+    <div className="bg-white/10 rounded-lg p-4 mb-8 shadow-lg border border-white/10">
+      <h2 className="font-bold mb-3 text-lg text-white">
+        📚 Top Resources for Learning{" "}
+        <span className="text-blue-400">{subject}</span>
       </h2>
 
-      {loading && <p className="text-gray-300">⏳ Loading resources...</p>}
-      {error && <p className="text-red-400">❌ {error}</p>}
+      {/* Loading state */}
+      {loading && <p className="text-gray-300 animate-pulse">⏳ Loading resources...</p>}
+
+      {/* Error state */}
+      {error && <p className="text-red-400">{error}</p>}
+
+      {/* No results */}
       {!loading && !error && resources.length === 0 && (
         <p className="text-gray-300">No resources found.</p>
       )}
 
+      {/* Resource list */}
       {!loading && !error && resources.length > 0 && (
         <div className="space-y-2">
           {resources.map((r, idx) => (
@@ -49,9 +64,9 @@ export default function LearningResources({ subject }) {
               href={r.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block p-2 bg-white/20 text-red-600 rounded no-underline hover:bg-white/30"
+              className="block p-2 bg-white/20 text-white rounded-md hover:bg-white/30 hover:scale-[1.02] transition transform"
             >
-              {r.title}
+              🔗 {r.title || "Untitled Resource"}
             </a>
           ))}
         </div>

@@ -1,76 +1,93 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import io from 'socket.io-client';
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import io from "socket.io-client";
 
-const socket = io('https://skillswap-1-1iic.onrender.com');
+// ✅ Use environment variable or fallback
+const API_URL = import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
+const socket = io(API_URL);
 
 function Navbar() {
   const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [avatar, setAvatar] = useState('');
+  const [avatar, setAvatar] = useState("");
   const [user, setUser] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // ✅ Fetch user info from localStorage every second (keeps navbar reactive)
   useEffect(() => {
-  const updateUser = () => {
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+    const updateUser = () => {
+      const token = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
 
-    setIsLoggedIn(!!token);
-    setUser(parsedUser);
+      setIsLoggedIn(!!token);
+      setUser(parsedUser);
 
-    if (parsedUser?.avatar) {
-      if (parsedUser.avatar.startsWith('http')) {
-        setAvatar(parsedUser.avatar);
+      if (parsedUser?.avatar) {
+        setAvatar(
+          parsedUser.avatar.startsWith("http")
+            ? parsedUser.avatar
+            : `${API_URL}/uploads/${parsedUser.avatar}`
+        );
+      } else if (parsedUser?.name) {
+        setAvatar(`https://ui-avatars.com/api/?name=${encodeURIComponent(parsedUser.name)}`);
       } else {
-        setAvatar(`https://skillswap-1-1iic.onrender.com/uploads/${parsedUser.avatar}`);
+        setAvatar("");
       }
-    } else {
-      setAvatar(`https://ui-avatars.com/api/?name=${encodeURIComponent(parsedUser?.name || 'P')}`);
-    }
-  };
+    };
 
-  updateUser();
-  const interval = setInterval(updateUser, 1000);
-  return () => clearInterval(interval);
-}, []);
+    updateUser();
+    const interval = setInterval(updateUser, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-
+  // ✅ Real-time notifications
   useEffect(() => {
-    if (user) {
-      socket.emit('join_room', user.id);
-      socket.on(`notification-${user.id}`, (message) => {
-        setUnreadCount((prev) => prev + 1);
-      });
-    }
+    if (!user) return;
+
+    socket.emit("join_room", user.id);
+    socket.on(`notification-${user.id}`, () => setUnreadCount((prev) => prev + 1));
+
     return () => {
-      if (user) socket.off(`notification-${user.id}`);
+      socket.off(`notification-${user.id}`);
     };
   }, [user]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setIsLoggedIn(false);
-    navigate('/');
+    navigate("/");
   };
 
   return (
     <nav className="bg-blue-600 text-white p-4 flex justify-between items-center fixed top-0 w-full z-50 shadow-md">
-      <Link to="/" className="font-bold text-xl">SkillSwap</Link>
+      <Link to="/" className="font-bold text-xl tracking-wide">
+        SkillSwap
+      </Link>
+
       <div className="space-x-4 flex items-center">
         {!isLoggedIn ? (
           <>
-            <Link to="/login" className="hover:underline">Login</Link>
-            <Link to="/register" className="hover:underline">Register</Link>
+            <Link to="/login" className="hover:underline">
+              Login
+            </Link>
+            <Link to="/register" className="hover:underline">
+              Register
+            </Link>
           </>
         ) : (
           <>
             {user?.isAdmin && (
-              <Link to="/admin" className="hover:underline">Admin</Link>
+              <Link to="/admin" className="hover:underline">
+                Admin
+              </Link>
             )}
-            <Link to="/dashboard" className="hover:underline">Dashboard</Link>
+            <Link to="/dashboard" className="hover:underline">
+              Dashboard
+            </Link>
+
+            {/* 🔔 Notifications */}
             <Link to="/notifications" className="relative hover:underline">
               🔔
               {unreadCount > 0 && (
@@ -79,13 +96,23 @@ function Navbar() {
                 </span>
               )}
             </Link>
-            <button onClick={handleLogout} className="hover:underline">Logout</button>
+
+            <button onClick={handleLogout} className="hover:underline">
+              Logout
+            </button>
+
+            {/* 🧑‍💻 Avatar */}
             <Link to="/profile">
               {avatar ? (
                 <img
                   src={avatar}
                   alt="Profile"
-                  className="w-9 h-9 rounded-full border border-white object-cover"
+                  className="w-9 h-9 rounded-full border border-white object-cover hover:scale-105 transition"
+                  onError={(e) => {
+                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                      user?.name || "P"
+                    )}`;
+                  }}
                 />
               ) : (
                 <div className="w-9 h-9 bg-white text-blue-600 font-bold rounded-full flex items-center justify-center">

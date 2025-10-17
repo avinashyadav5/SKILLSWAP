@@ -1,104 +1,124 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import Navbar from '../components/Navbar';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import Navbar from "../components/Navbar";
 
 function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [role, setRole] = useState('all');
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage] = useState(4);
-  const [sortKey, setSortKey] = useState('name');
-  const [sortOrder, setSortOrder] = useState('asc');
+  const [sortKey, setSortKey] = useState("name");
+  const [sortOrder, setSortOrder] = useState("asc");
 
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user'));
+  const token = localStorage.getItem("token");
+  const user = JSON.parse(localStorage.getItem("user"));
 
+  // ✅ Use env backend URL
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+  // ✅ Fetch all users
   useEffect(() => {
     if (!user || !user.isAdmin) {
-      navigate('/');
+      navigate("/");
       return;
     }
 
-    axios
-      .get('https://skillswap-1-1iic.onrender.com/api/admin/users', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((res) => {
+    const fetchUsers = async () => {
+      try {
+        const res = await axios.get(`${BACKEND_URL}/api/admin/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setUsers(res.data);
         setFiltered(res.data);
-      })
-      .catch((err) => {
-        console.error('❌ Failed to fetch users:', err);
-        alert('Unauthorized or session expired');
-        navigate('/');
-      })
-      .finally(() => setLoading(false));
-  }, []);
+      } catch (err) {
+        console.error("❌ Failed to fetch users:", err);
+        alert("Unauthorized or session expired");
+        navigate("/");
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    fetchUsers();
+  }, [navigate, token, user, BACKEND_URL]);
+
+  // ✅ Filtering + sorting
   useEffect(() => {
     let result = [...users];
 
     if (search) {
       result = result.filter((u) =>
-        u.name.toLowerCase().includes(search.toLowerCase())
+        u.name?.toLowerCase().includes(search.toLowerCase())
       );
     }
 
-    if (role !== 'all') {
-      result = result.filter((u) => (role === 'admin' ? u.isAdmin : !u.isAdmin));
+    if (role !== "all") {
+      result = result.filter((u) =>
+        role === "admin" ? u.isAdmin : !u.isAdmin
+      );
     }
 
     result.sort((a, b) => {
-      const aVal = a[sortKey]?.toLowerCase?.() || '';
-      const bVal = b[sortKey]?.toLowerCase?.() || '';
-      return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      const aVal = a[sortKey]?.toLowerCase?.() || "";
+      const bVal = b[sortKey]?.toLowerCase?.() || "";
+      return sortOrder === "asc"
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
     });
 
     setFiltered(result);
   }, [search, role, users, sortKey, sortOrder]);
 
+  // ✅ Delete user
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
-      try {
-        await axios.delete(`https://skillswap-1-1iic.onrender.com/api/user/${id}`);
-        setUsers(users.filter((u) => u.id !== id));
-      } catch (err) {
-        alert('Error deleting user');
-      }
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+
+    try {
+      await axios.delete(`${BACKEND_URL}/api/user/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Error deleting user");
     }
   };
 
+  // ✅ Toggle admin role
   const toggleAdmin = async (id) => {
     try {
       await axios.put(
-        `https://skillswap-1-1iic.onrender.com/api/admin/toggle/${id}`,
+        `${BACKEND_URL}/api/admin/toggle/${id}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setUsers(
-        users.map((u) => (u.id === id ? { ...u, isAdmin: !u.isAdmin } : u))
+      setUsers((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, isAdmin: !u.isAdmin } : u))
       );
     } catch (err) {
-      alert('Error toggling admin');
+      console.error("Toggle admin error:", err);
+      alert("Error toggling admin status");
     }
   };
 
+  // ✅ Pagination logic
   const totalPages = Math.ceil(filtered.length / usersPerPage);
   const indexOfLastUser = currentPage * usersPerPage;
   const indexOfFirstUser = indexOfLastUser - usersPerPage;
   const currentUsers = filtered.slice(indexOfFirstUser, indexOfLastUser);
 
+  // ✅ Sorting button toggle
   const handleSort = (key) => {
     if (sortKey === key) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
-      setSortOrder('asc');
+      setSortOrder("asc");
     }
   };
 
@@ -108,6 +128,7 @@ function AdminDashboard() {
       <div className="max-w-6xl mx-auto pt-24 px-4">
         <h1 className="text-3xl font-bold mb-6">👑 Admin Dashboard</h1>
 
+        {/* Filters and Controls */}
         <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <input
             type="text"
@@ -126,13 +147,14 @@ function AdminDashboard() {
             <option value="user">Users</option>
           </select>
           <button
-            onClick={() => handleSort('name')}
+            onClick={() => handleSort("name")}
             className="bg-white text-black px-3 py-2 rounded shadow"
           >
-            Sort by Name {sortOrder === 'asc' ? '↑' : '↓'}
+            Sort by Name {sortOrder === "asc" ? "↑" : "↓"}
           </button>
         </div>
 
+        {/* Users Grid */}
         {loading ? (
           <p>Loading users...</p>
         ) : (
@@ -145,8 +167,8 @@ function AdminDashboard() {
                 <img
                   src={
                     u.avatar
-                      ? `https://skillswap-1-1iic.onrender.com/uploads/${u.avatar}`
-                      : 'https://via.placeholder.com/80'
+                      ? `${BACKEND_URL}/uploads/${u.avatar}`
+                      : "https://via.placeholder.com/80"
                   }
                   alt={u.name}
                   className="w-16 h-16 rounded-full object-cover border-2 border-white"
@@ -154,15 +176,21 @@ function AdminDashboard() {
                 <div className="flex-1">
                   <h2 className="text-xl font-semibold">{u.name}</h2>
                   <p>📧 {u.email}</p>
-                  <p>✨ Teaches: <span className="text-yellow-300">{u.teach || 'N/A'}</span></p>
-                  <p>🎯 Wants to learn: <span className="text-pink-400">{u.learn || 'N/A'}</span></p>
-                  <p>🔐 Role: {u.isAdmin ? 'Admin' : 'User'}</p>
+                  <p>
+                    ✨ Teaches:{" "}
+                    <span className="text-yellow-300">{u.teach || "N/A"}</span>
+                  </p>
+                  <p>
+                    🎯 Wants to learn:{" "}
+                    <span className="text-pink-400">{u.learn || "N/A"}</span>
+                  </p>
+                  <p>🔐 Role: {u.isAdmin ? "Admin" : "User"}</p>
                   <div className="mt-2 flex gap-2">
                     <button
                       onClick={() => toggleAdmin(u.id)}
                       className="bg-yellow-500 hover:bg-yellow-600 text-black px-3 py-1 rounded"
                     >
-                      {u.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                      {u.isAdmin ? "Remove Admin" : "Make Admin"}
                     </button>
                     <button
                       onClick={() => handleDelete(u.id)}
@@ -177,13 +205,16 @@ function AdminDashboard() {
           </div>
         )}
 
+        {/* Pagination */}
         <div className="mt-6 flex justify-center gap-2">
           {[...Array(totalPages)].map((_, i) => (
             <button
               key={i + 1}
               onClick={() => setCurrentPage(i + 1)}
               className={`px-3 py-1 rounded ${
-                currentPage === i + 1 ? 'bg-blue-500' : 'bg-white text-black'
+                currentPage === i + 1
+                  ? "bg-blue-500"
+                  : "bg-white text-black hover:bg-gray-300"
               }`}
             >
               {i + 1}

@@ -4,11 +4,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import Particles from "react-tsparticles";
 import { loadSlim } from "tsparticles-slim";
 
-const socket = io("https://skillswap-1-1iic.onrender.com");
-
 export default function Notification({ userId }) {
   const [notifications, setNotifications] = useState([]);
   const [muted, setMuted] = useState(false);
+
+  // ✅ Use env variable for backend (Render + Localhost)
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+  // ✅ Initialize socket with dynamic backend
+  const socket = io(BACKEND_URL, { transports: ["websocket", "polling"] });
 
   useEffect(() => {
     if (!userId) return;
@@ -20,7 +24,11 @@ export default function Notification({ userId }) {
         const formattedNote =
           typeof note === "string"
             ? { id: Date.now(), message: note, read: false }
-            : { id: note.id || Date.now(), message: note.message, read: note.read || false };
+            : {
+                id: note.id || Date.now(),
+                message: note.message,
+                read: note.read || false,
+              };
 
         setNotifications((prev) => [formattedNote, ...prev]);
       }
@@ -33,28 +41,33 @@ export default function Notification({ userId }) {
     };
   }, [userId, muted]);
 
+  // ✅ Toggle mute state (API call to backend)
   const toggleMute = async () => {
     try {
-      const res = await fetch(`/api/notifications/mute/${userId}`, {
+      const res = await fetch(`${BACKEND_URL}/api/notifications/mute/${userId}`, {
         method: "POST",
       });
+      if (!res.ok) throw new Error("Failed to toggle mute");
       const data = await res.json();
       setMuted(data.muted);
     } catch (err) {
       console.error("Mute toggle failed:", err);
+      alert("⚠️ Failed to toggle notifications mute state");
     }
   };
 
+  // ✅ Mark a notification as read
   const markRead = async (id) => {
     try {
-      await fetch(`/api/notifications/read/${id}`, { method: "PATCH" });
+      await fetch(`${BACKEND_URL}/api/notifications/read/${id}`, {
+        method: "PATCH",
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
     } catch (err) {
       console.error("Mark read failed:", err);
     }
-
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
   };
 
   return (

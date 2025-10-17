@@ -1,28 +1,37 @@
-import { useEffect, useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import Carousel from 'react-multi-carousel';
-import 'react-multi-carousel/lib/styles.css';
-import UserReviews from '../components/UserReviews';
-import { FaStar, FaUsers, FaComments, FaBolt } from 'react-icons/fa';
-import * as THREE from 'three';
-import CountUp from 'react-countup';
+import { useEffect, useState, useRef } from "react";
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import Carousel from "react-multi-carousel";
+import "react-multi-carousel/lib/styles.css";
+import UserReviews from "../components/UserReviews";
+import { FaStar, FaUsers, FaComments, FaBolt } from "react-icons/fa";
+import * as THREE from "three";
+import CountUp from "react-countup";
 
 function Home() {
-  const token = localStorage.getItem('token');
-  const me = JSON.parse(localStorage.getItem('user'));
-  const userId = me?.id; // Current logged in user id or replace with any user id to show reviews for that user
+  const token = localStorage.getItem("token");
+  const me = JSON.parse(localStorage.getItem("user"));
+  const userId = me?.id;
 
   const [reviews, setReviews] = useState([]);
-  const [stats, setStats] = useState({ users: 0, matches: 0, messages: 0, rating: 4.5 });
+  const [stats, setStats] = useState({
+    users: 0,
+    matches: 0,
+    messages: 0,
+    rating: 4.5,
+  });
+
   const vantaRef = useRef(null);
   const vantaEffect = useRef(null);
 
-  // Load VANTA.NET
+  // ✅ Environment-safe backend URL
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+  // 🌀 Initialize Vanta.js
   useEffect(() => {
     let effect;
     const loadVanta = async () => {
-      const NET = (await import('vanta/src/vanta.net')).default;
+      const NET = (await import("vanta/src/vanta.net")).default;
       if (!vantaEffect.current && vantaRef.current) {
         effect = NET({
           el: vantaRef.current,
@@ -54,40 +63,42 @@ function Home() {
     };
   }, []);
 
-  // Load Reviews for Testimonials Carousel
+  // 🌟 Fetch Reviews
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const res = await fetch('https://skillswap-1-1iic.onrender.com/api/rating/with-users');
+        const res = await fetch(`${BACKEND_URL}/api/rating/with-users`);
+        if (!res.ok) throw new Error("Failed to fetch reviews");
         const data = await res.json();
         if (Array.isArray(data)) setReviews(data);
       } catch (err) {
-        console.error('Fetch reviews failed:', err);
+        console.error("Fetch reviews failed:", err);
       }
     };
     fetchReviews();
-  }, []);
+  }, [BACKEND_URL]);
 
-  // Load Stats
+  // 📊 Fetch Stats
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('https://skillswap-1-1iic.onrender.com/api/stats');
+        const res = await fetch(`${BACKEND_URL}/api/stats`);
+        if (!res.ok) throw new Error("Failed to fetch stats");
         const data = await res.json();
         setStats(data);
       } catch (err) {
-        console.error('Error fetching stats:', err);
+        console.error("Error fetching stats:", err);
       }
     };
     fetchStats();
-  }, []);
+  }, [BACKEND_URL]);
 
   return (
     <div
       ref={vantaRef}
       className="min-h-screen text-white flex flex-col items-center px-3 pt-28 relative overflow-hidden"
     >
-      {/* Hero */}
+      {/* 🌈 Hero Section */}
       <motion.h1
         className="text-5xl md:text-6xl font-extrabold drop-shadow-xl z-10"
         initial={{ opacity: 0, y: -40 }}
@@ -131,7 +142,7 @@ function Home() {
         </motion.div>
       )}
 
-      {/* Stats */}
+      {/* 📈 Stats Section */}
       <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 w-full max-w-4xl text-center z-10">
         <div className="bg-white/10 p-4 rounded-xl backdrop-blur-md">
           <FaUsers className="text-3xl mx-auto" />
@@ -159,11 +170,11 @@ function Home() {
         </div>
       </motion.div>
 
-      {/* How It Works */}
+      {/* ⚙️ How It Works */}
       <motion.div className="max-w-4xl mt-20 z-10">
         <h2 className="text-2xl font-bold text-center mb-6">How It Works</h2>
         <div className="grid md:grid-cols-4 gap-4 text-center">
-          {['Register', 'Match', 'Chat', 'Review'].map((step, idx) => (
+          {["Register", "Match", "Chat", "Review"].map((step, idx) => (
             <motion.div
               key={step}
               className="bg-white/10 p-4 rounded-xl hover:scale-105 transition-all backdrop-blur-md"
@@ -179,23 +190,23 @@ function Home() {
         </div>
       </motion.div>
 
-      {/* Features */}
+      {/* 💎 Features */}
       <motion.div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-10 mt-20 w-full max-w-5xl z-10">
         {[
           {
-            icon: '💬',
-            title: 'Real-Time Chat',
-            desc: 'Connect instantly with matched users and share your knowledge.',
+            icon: "💬",
+            title: "Real-Time Chat",
+            desc: "Connect instantly with matched users and share your knowledge.",
           },
           {
-            icon: '🔍',
-            title: 'Skill-Based Matching',
-            desc: 'Get matched based on what you can teach and what you want to learn.',
+            icon: "🔍",
+            title: "Skill-Based Matching",
+            desc: "Get matched based on what you can teach and what you want to learn.",
           },
           {
-            icon: '✨',
-            title: 'Clean User Interface',
-            desc: 'Focus on learning and teaching with a distraction-free UI.',
+            icon: "✨",
+            title: "Clean User Interface",
+            desc: "Focus on learning and teaching with a distraction-free UI.",
           },
         ].map((item, idx) => (
           <motion.div
@@ -214,7 +225,7 @@ function Home() {
         ))}
       </motion.div>
 
-      {/* Testimonials */}
+      {/* 🗣️ Testimonials */}
       <motion.div className="max-w-5xl mt-20 w-full z-10">
         <h2 className="text-2xl font-bold text-center mb-6">Testimonials</h2>
         <Carousel
@@ -231,7 +242,7 @@ function Home() {
           {reviews.map((r, i) => (
             <div key={i} className="p-4 bg-white/10 m-2 rounded-xl backdrop-blur-md">
               <h4 className="font-semibold">
-                {r.rater.name} ➝ {r.rated.name}
+                {r.rater?.name} ➝ {r.rated?.name}
               </h4>
               <p className="italic">&quot;{r.review}&quot;</p>
             </div>
@@ -239,7 +250,7 @@ function Home() {
         </Carousel>
       </motion.div>
 
-      {/* User Reviews for current logged in user */}
+      {/* 👤 User Reviews Section */}
       <motion.div
         className="min-h-screen w-full p-8 z-10"
         initial={{ opacity: 0, y: 40 }}
@@ -248,7 +259,11 @@ function Home() {
         viewport={{ once: true }}
       >
         <div className="max-w-5xl mx-auto">
-          {userId ? <UserReviews ratedId={userId} /> : <p className="text-white">Please log in to see your reviews.</p>}
+          {userId ? (
+            <UserReviews ratedId={userId} />
+          ) : (
+            <p className="text-white">Please log in to see your reviews.</p>
+          )}
         </div>
       </motion.div>
     </div>

@@ -8,14 +8,28 @@ function RateUser({ raterId, ratedId }) {
   const [hovered, setHovered] = useState(null);
   const [review, setReview] = useState('');
 
+  // ✅ Use environment variable or fallback to local
+  const BACKEND_URL =
+    import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
   const submit = async () => {
-    await fetch('https://skillswap-1-1iic.onrender.com/api/rating', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raterId, ratedId, stars, review }),
-    });
-    alert('Thanks for your feedback!');
-    setReview('');
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/rating`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raterId, ratedId, stars, review }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit rating');
+      }
+
+      alert('✅ Thanks for your feedback!');
+      setReview('');
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      alert('❌ Failed to submit feedback. Please try again later.');
+    }
   };
 
   const handleClick = (index) => {
@@ -38,7 +52,7 @@ function RateUser({ raterId, ratedId }) {
         ))}
       </div>
       <textarea
-        className="w-full mt-2 p-2 text-black"
+        className="w-full mt-2 p-2 text-black rounded"
         placeholder="Write a review..."
         value={review}
         onChange={(e) => setReview(e.target.value)}

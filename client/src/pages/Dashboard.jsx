@@ -8,7 +8,7 @@ import SubjectSearch from "../components/SubjectSearch";
 import LearningPath from "../components/LearningPath";
 import LearningResources from "../components/LearningResources";
 import Chatbot from "../components/Chatbot";
-import StudyBuddy from "../components/StudyBuddy";   // ✅ Import AI Study Buddy
+import StudyBuddy from "../components/StudyBuddy"; // ✅ AI Study Buddy
 
 function Dashboard() {
   const [user, setUser] = useState(null);
@@ -16,6 +16,9 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState("");
+
+  // ✅ Use environment variable for backend URL
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -29,20 +32,25 @@ function Dashboard() {
 
     const parsedUser = JSON.parse(storedUser);
 
-    // ✅ Fetch full user profile (including teach + learn arrays)
+    // ✅ Fetch full user profile and rating
     async function fetchUserProfile() {
       try {
-        const res = await fetch(`https://skillswap-1-1iic.onrender.com/api/user/${parsedUser.id}`);
-        if (!res.ok) throw new Error("Failed to fetch user profile");
-        const fullUser = await res.json();
+        const [profileRes, ratingRes] = await Promise.all([
+          fetch(`${BACKEND_URL}/api/user/${parsedUser.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${BACKEND_URL}/api/rating/average/${parsedUser.id}`),
+        ]);
+
+        if (!profileRes.ok) throw new Error("Failed to fetch user profile");
+        const fullUser = await profileRes.json();
         setUser(fullUser);
 
-        // Fetch rating separately
-        const ratingRes = await fetch(`https://skillswap-1-1iic.onrender.com/api/rating/average/${parsedUser.id}`);
         if (!ratingRes.ok) throw new Error("Failed to fetch average rating");
         const ratingData = await ratingRes.json();
         setAvgRating(ratingData.avgStars || 0);
       } catch (err) {
+        console.error("❌ Dashboard Error:", err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -50,8 +58,9 @@ function Dashboard() {
     }
 
     fetchUserProfile();
-  }, []);
+  }, [BACKEND_URL]);
 
+  // ✅ Render star ratings
   const renderStars = () => {
     if (avgRating == null || isNaN(Number(avgRating))) return null;
     const ratingNum = Number(avgRating);
@@ -76,6 +85,7 @@ function Dashboard() {
 
   return (
     <div className="relative min-h-screen mt-14 text-white p-6 overflow-hidden bg-[#0d1117]">
+      {/* Background Particles */}
       <Particles
         className="absolute inset-0 z-0 pointer-events-none"
         init={loadSlim}
@@ -94,6 +104,7 @@ function Dashboard() {
       />
 
       <div className="relative z-10 max-w-3xl mx-auto">
+        {/* Welcome Header */}
         <motion.h1
           className="text-3xl font-bold mb-6 flex items-center gap-2"
           initial={{ opacity: 0, y: -20 }}
@@ -104,6 +115,7 @@ function Dashboard() {
           {renderStars()}
         </motion.h1>
 
+        {/* Matches */}
         <motion.h2
           className="text-xl font-semibold mb-4"
           initial={{ opacity: 0, y: 10 }}
@@ -115,6 +127,7 @@ function Dashboard() {
 
         <Matches userId={user.id} token={localStorage.getItem("token")} />
 
+        {/* Subject + AI Tools */}
         <div className="mt-10">
           <label className="block mb-2 text-white font-medium">
             Enter a subject to get personalized recommendations:
@@ -129,9 +142,10 @@ function Dashboard() {
             </div>
           )}
 
+          {/* AI Chatbot */}
           <Chatbot />
 
-          {/* ✅ AI Study Buddy Added — now passing full user object */}
+          {/* AI Study Buddy */}
           <div className="mt-8">
             <StudyBuddy user={user} />
           </div>

@@ -7,6 +7,9 @@ export default function StudyBuddy() {
   const [teachSubjects, setTeachSubjects] = useState([]);
   const [learnSubjects, setLearnSubjects] = useState([]);
 
+  // ✅ Use your env variable name
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));
     if (user) {
@@ -17,13 +20,15 @@ export default function StudyBuddy() {
 
   const handleSend = async () => {
     if (!message.trim()) return;
+
     const userMsg = { sender: "user", text: message };
     setChat((prev) => [...prev, userMsg]);
+
     const currentMessage = message;
     setMessage("");
 
     try {
-      const res = await fetch("https://skillswap-1-1iic.onrender.com/api/study-buddy", {
+      const res = await fetch(`${BACKEND_URL}/api/study-buddy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -34,19 +39,31 @@ export default function StudyBuddy() {
       });
 
       const data = await res.json();
-      const aiMsg = { sender: "ai", text: data.reply || "No response" };
+      const aiMsg = {
+        sender: "ai",
+        text: data.reply || "🤖 No response from the Study Buddy",
+      };
       setChat((prev) => [...prev, aiMsg]);
-    } catch {
-      setChat((prev) => [...prev, { sender: "ai", text: "❌ Server error" }]);
+    } catch (err) {
+      console.error("StudyBuddy API error:", err);
+      setChat((prev) => [
+        ...prev,
+        { sender: "ai", text: "❌ Server error. Please try again later." },
+      ]);
     }
   };
 
   return (
     <div className="flex flex-col h-[80vh] bg-[#111827] text-white rounded-lg shadow-lg p-4">
       <h2 className="text-xl font-bold mb-2">🤖 AI Study Buddy</h2>
+
       <div className="text-sm mb-3">
-        <p className="text-blue-400">📘 Teach: {teachSubjects.join(", ") || "None"}</p>
-        <p className="text-green-400">📗 Learn: {learnSubjects.join(", ") || "None"}</p>
+        <p className="text-blue-400">
+          📘 Teach: {teachSubjects.join(", ") || "None"}
+        </p>
+        <p className="text-green-400">
+          📗 Learn: {learnSubjects.join(", ") || "None"}
+        </p>
       </div>
 
       {/* Chat Box */}
