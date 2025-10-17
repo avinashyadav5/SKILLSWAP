@@ -184,13 +184,13 @@ function Chat() {
       await fetch(`${BACKEND_URL}/api/messages`, { method: "POST", body: formData });
       setText("");
       setSelectedImages([]);
-      setShowEmojiPicker(false); // ✅ close picker only when message sent
+      setShowEmojiPicker(false); // ✅ closes picker after sending
     } catch (err) {
       console.error("Error sending message:", err);
     }
   };
 
-  // ✅ Emoji picker click (does NOT close after selection)
+  // ✅ Emoji picker click (stays open)
   const onEmojiClick = (emojiData) => {
     setText((prev) => prev + emojiData.emoji);
   };
@@ -321,7 +321,7 @@ function Chat() {
 
           {/* 😀 Emoji Toggle */}
           <button
-            onClick={() => setShowEmojiPicker((prev) => !prev)}
+            onClick={() => setShowEmojiPicker((prev) => !prev)} // ✅ toggle open/close
             className="text-xl bg-white/20 p-2 rounded-lg"
           >
             😀
@@ -347,7 +347,7 @@ function Chat() {
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 sendMessage();
-                setShowEmojiPicker(false); // ✅ close picker after sending
+                setShowEmojiPicker(false); // ✅ closes picker after sending
               }
             }}
             className="flex-grow p-2 rounded-md text-black min-w-[150px]"
@@ -357,7 +357,7 @@ function Chat() {
           <button
             onClick={() => {
               sendMessage();
-              setShowEmojiPicker(false); // ✅ close picker after sending
+              setShowEmojiPicker(false); // ✅ closes picker after sending
             }}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
           >
