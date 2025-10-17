@@ -6,7 +6,8 @@ import EmojiPicker from "emoji-picker-react";
 import UserReviews from "../components/UserReviews";
 import { RTC_CONFIG } from "../utils/webrtc";
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// ✅ Always use deployed backend in production
+const BACKEND_URL = "https://skillswap-1-1iic.onrender.com";
 const socket = io(BACKEND_URL, { transports: ["websocket", "polling"] });
 
 function Chat() {
@@ -78,7 +79,7 @@ function Chat() {
 
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
-    // ✅ WebRTC events
+    // ✅ Handle WebRTC events
     socket.on("webrtc_offer", async ({ from, offer }) => {
       if (!peerRef.current) await initWebRTCConnection(from, true, offer);
     });
@@ -194,7 +195,7 @@ function Chat() {
     }
   };
 
-  // ✅ Submit Review
+  // ✅ Submit Review (uses Render backend now)
   const submitReview = async () => {
     if (rating === 0 || reviewText.trim() === "") return alert("Please rate and comment.");
     try {
@@ -272,9 +273,7 @@ function Chat() {
         </div>
 
         {/* Messages */}
-        <div
-          className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4"
-        >
+        <div className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4">
           {Object.entries(groupedByDate).map(([date, msgs], idx) => (
             <div key={idx}>
               <div className="text-center text-gray-400 text-sm my-2">📅 {date}</div>
@@ -296,15 +295,6 @@ function Chat() {
                           src={`${BACKEND_URL}/uploads/chat/${img}`}
                           alt="chat-img"
                           className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
-                          onClick={() =>
-                            setLightbox({
-                              open: true,
-                              images: m.images.map(
-                                (im) => `${BACKEND_URL}/uploads/chat/${im}`
-                              ),
-                              index: idx2,
-                            })
-                          }
                         />
                       ))}
                     </div>
@@ -316,7 +306,7 @@ function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Section */}
+        {/* Input */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
           <button
             onClick={() => initWebRTCConnection(otherId)}
@@ -372,10 +362,10 @@ function Chat() {
           </div>
         )}
 
-        {/* Existing Reviews */}
+        {/* ✅ User Reviews */}
         <UserReviews ratedId={otherId} />
 
-        {/* ⭐ Write Review Section */}
+        {/* ⭐ Write Review */}
         <div className="mt-6 bg-white/10 p-4 rounded-xl border border-white/20">
           <h3 className="text-lg font-semibold mb-2">Write a Review for {otherUser?.name}</h3>
 
@@ -415,20 +405,6 @@ function Chat() {
           )}
         </div>
       </div>
-
-      {/* ✅ Lightbox */}
-      {lightbox.open && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
-          onClick={() => setLightbox({ ...lightbox, open: false })}
-        >
-          <img
-            src={lightbox.images[lightbox.index]}
-            alt="Full view"
-            className="max-h-[90%] max-w-[90%] rounded-lg"
-          />
-        </div>
-      )}
     </div>
   );
 }
