@@ -276,7 +276,7 @@ function Chat() {
             onClick={() => initWebRTCConnection(otherId)}
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded mt-4"
           >
-            📹 Start Video Call
+            📹
           </button>
 
           <button
