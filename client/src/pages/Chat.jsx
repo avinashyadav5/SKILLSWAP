@@ -264,6 +264,32 @@ function Chat() {
                   }`}
                 >
                   {m.text && <p>{m.text}</p>}
+
+                  {/* 🖼️ Image display */}
+                  {m.images && m.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {m.images.map((img, idx2) => {
+                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
+                        return (
+                          <img
+                            key={idx2}
+                            src={fullUrl}
+                            alt="chat-img"
+                            className="w-24 h-24 object-cover rounded-md border border-gray-400 cursor-pointer hover:opacity-90"
+                            onClick={() =>
+                              setLightbox({
+                                open: true,
+                                images: m.images.map(
+                                  (im) => `${BACKEND_URL}/uploads/chat/${im}`
+                                ),
+                                index: idx2,
+                              })
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -271,7 +297,7 @@ function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Image Previews */}
+        {/* Image Previews before sending */}
         {selectedImages.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
             {selectedImages.map((file, idx) => (
@@ -367,7 +393,7 @@ function Chat() {
           </div>
         )}
 
-        {/* ⭐ Rating */}
+        {/* ⭐ Rating Section */}
         {!showRatingForm && (
           <button
             onClick={() => setShowRatingForm(true)}
