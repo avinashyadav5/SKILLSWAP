@@ -28,11 +28,8 @@ const server = http.createServer(app);
 
 // ✅ CORS setup for both localhost & deployed frontend
 const allowedOrigins = [
-  'http://localhost:5173', // Local dev
-  'https://skillswap-97hnfvhzo-aviydv7518-2206s-projects.vercel.app',
-  'https://skillswap-aviydv7518-2206s-projects.vercel.app',
-  'https://skillswap-6ylk1lips-aviydv7518-2206s-projects.vercel.app/',
-  'https://skillswap-mocha-pi.vercel.app/', // Deployed frontend
+  'http://localhost:5173',
+  'https://skillswap-nine-beta.vercel.app',  // Deployed frontend
 ];
 
 app.use(
