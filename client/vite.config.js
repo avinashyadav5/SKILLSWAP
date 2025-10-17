@@ -1,16 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { copyFileSync } from 'fs'
 
-// ✅ Production-safe config for Vercel
 export default defineConfig({
-  plugins: [react()],
-  base: '/', // important for routing
+  plugins: [
+    react(),
+    {
+      name: 'copy-redirects',
+      closeBundle() {
+        copyFileSync('public/_redirects', 'dist/_redirects')
+      }
+    }
+  ],
+  base: '/',
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
-  },
-  server: {
-    port: 5173,
-    open: true,
   },
 })
