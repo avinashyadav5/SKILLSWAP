@@ -184,6 +184,7 @@ function Chat() {
       await fetch(`${BACKEND_URL}/api/messages`, { method: "POST", body: formData });
       setText("");
       setSelectedImages([]);
+      setShowEmojiPicker(false); // ✅ close picker after sending
     } catch (err) {
       console.error("Error sending message:", err);
     }
@@ -310,7 +311,7 @@ function Chat() {
         )}
 
         {/* Input Section */}
-        <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg">
+        <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
           <button
             onClick={() => initWebRTCConnection(otherId)}
             className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full"
@@ -319,15 +320,16 @@ function Chat() {
             📹
           </button>
 
+          {/* 😀 Emoji Toggle */}
           <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
             className="text-xl bg-white/20 p-2 rounded-lg"
           >
             😀
           </button>
 
           {showEmojiPicker && (
-            <div className="absolute z-10 bottom-24 left-4 sm:left-8 scale-90 sm:scale-100">
+            <div className="absolute z-10 bottom-20 left-4 sm:left-8 scale-90 sm:scale-100">
               <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
             </div>
           )}
@@ -343,13 +345,21 @@ function Chat() {
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                sendMessage();
+                setShowEmojiPicker(false); // ✅ close on send
+              }
+            }}
             className="flex-grow p-2 rounded-md text-black min-w-[150px]"
             placeholder="Type your message..."
           />
 
           <button
-            onClick={sendMessage}
+            onClick={() => {
+              sendMessage();
+              setShowEmojiPicker(false); // ✅ close on send
+            }}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
           >
             Send
