@@ -23,7 +23,7 @@ function Chat() {
   const [userError, setUserError] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedImages, setSelectedImages] = useState([]);
+  const [selectedImages, setSelectedImages] = useState([]); // ✅ Image preview state
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
 
   // Call / WebRTC state
@@ -159,7 +159,6 @@ function Chat() {
       setCallLoading(false);
     });
 
-    // ✅ Handle when other user ends call
     socket.on("end_call", () => {
       console.log("📴 Remote user ended the call");
       endCall();
@@ -179,11 +178,7 @@ function Chat() {
   }, [myId, otherId]);
 
   // === Initialize WebRTC Connection ===
-  const initWebRTCConnection = async (
-    from,
-    isReceiver = false,
-    remoteOffer = null
-  ) => {
+  const initWebRTCConnection = async (from, isReceiver = false, remoteOffer = null) => {
     setInCall(true);
     setCallLoading(true);
 
@@ -193,14 +188,9 @@ function Chat() {
 
     peerRef.current = new RTCPeerConnection(RTC_CONFIG);
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     localVideoRef.current.srcObject = stream;
-    stream
-      .getTracks()
-      .forEach((track) => peerRef.current.addTrack(track, stream));
+    stream.getTracks().forEach((track) => peerRef.current.addTrack(track, stream));
 
     peerRef.current.ontrack = (event) => {
       remoteVideoRef.current.srcObject = event.streams[0];
@@ -216,18 +206,13 @@ function Chat() {
     };
 
     peerRef.current.oniceconnectionstatechange = () => {
-      if (
-        peerRef.current?.iceConnectionState === "disconnected" ||
-        peerRef.current?.iceConnectionState === "failed"
-      ) {
+      if (["disconnected", "failed"].includes(peerRef.current.iceConnectionState)) {
         endCall();
       }
     };
 
     if (isReceiver && remoteOffer) {
-      await peerRef.current.setRemoteDescription(
-        new RTCSessionDescription(remoteOffer)
-      );
+      await peerRef.current.setRemoteDescription(new RTCSessionDescription(remoteOffer));
       const answer = await peerRef.current.createAnswer();
       await peerRef.current.setLocalDescription(answer);
       socket.emit("webrtc_answer", { to: from, answer });
@@ -283,9 +268,7 @@ function Chat() {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const res = await fetch(
-          `${BACKEND_URL}/api/messages/${myId}/${otherId}`
-        );
+        const res = await fetch(`${BACKEND_URL}/api/messages/${myId}/${otherId}`);
         const data = await res.json();
         const formatted = data.map((msg) => ({
           ...msg,
@@ -317,10 +300,7 @@ function Chat() {
       formData.append("receiverId", otherId);
       formData.append("text", text);
       selectedImages.forEach((img) => formData.append("images", img));
-      await fetch(`${BACKEND_URL}/api/messages`, {
-        method: "POST",
-        body: formData,
-      });
+      await fetch(`${BACKEND_URL}/api/messages`, { method: "POST", body: formData });
       setText("");
       setSelectedImages([]);
       setShowEmojiPicker(false);
@@ -329,8 +309,7 @@ function Chat() {
     }
   };
 
-  const onEmojiClick = (emojiData) =>
-    setText((prev) => prev + emojiData.emoji);
+  const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
 
   const groupedByDate = messages.reduce((acc, msg) => {
     const date = new Date(msg.createdAt).toLocaleDateString();
@@ -342,6 +321,7 @@ function Chat() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white">
       <Navbar />
+
       <div className="w-full max-w-2xl mx-auto sm:px-4 px-2 py-16">
         {/* HEADER */}
         <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -369,9 +349,7 @@ function Chat() {
           </div>
           <span
             className={`ml-auto ${
-              onlineUsers.includes(otherId)
-                ? "text-green-400"
-                : "text-red-400"
+              onlineUsers.includes(otherId) ? "text-green-400" : "text-red-400"
             }`}
           >
             {onlineUsers.includes(otherId) ? "Online" : "Offline"}
@@ -379,14 +357,10 @@ function Chat() {
         </div>
 
         {/* CHAT BOX */}
-        <div
-          className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4"
-        >
+        <div className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4">
           {Object.entries(groupedByDate).map(([date, msgs], idx) => (
             <div key={idx}>
-              <div className="text-center text-gray-400 text-sm my-2">
-                📅 {date}
-              </div>
+              <div className="text-center text-gray-400 text-sm my-2">📅 {date}</div>
               {msgs.map((m, i) => (
                 <div
                   key={i}
@@ -397,12 +371,41 @@ function Chat() {
                   }`}
                 >
                   {m.text && <p>{m.text}</p>}
+                  {m.images?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {m.images.map((img, idx2) => {
+                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
+                        return (
+                          <img
+                            key={idx2}
+                            src={fullUrl}
+                            alt="chat-img"
+                            className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           ))}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* ✅ Selected Images Preview */}
+        {selectedImages.length > 0 && (
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {selectedImages.map((file, idx) => (
+              <img
+                key={idx}
+                src={URL.createObjectURL(file)}
+                alt="preview"
+                className="w-16 h-16 object-cover rounded-lg border border-white/30"
+              />
+            ))}
+          </div>
+        )}
 
         {/* CALL + INPUT BAR */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
@@ -478,24 +481,10 @@ function Chat() {
           <div className="flex flex-col items-center mt-4">
             <h3 className="text-lg font-semibold mb-2">🎥 Live Video Call</h3>
             <div className="flex gap-4 flex-wrap justify-center">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                muted
-                playsInline
-                className="w-64 h-48 bg-black rounded"
-              />
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-64 h-48 bg-black rounded"
-              />
+              <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
+              <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
             </div>
-            <button
-              onClick={endCall}
-              className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
-            >
+            <button onClick={endCall} className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
               End Call
             </button>
           </div>
