@@ -24,6 +24,7 @@ function Chat() {
   const [selectedImages, setSelectedImages] = useState([]);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
 
+  // --- Video Call State ---
   const [inCall, setInCall] = useState(false);
   const [incomingCallOffer, setIncomingCallOffer] = useState(false);
   const [callFrom, setCallFrom] = useState(null);
@@ -69,6 +70,7 @@ function Chat() {
     socket.on("receive_message", onReceiveMessage);
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
+    // --- Video Call Events ---
     socket.on("call_request", ({ from }) => {
       setCallFrom(from);
       setIncomingCallOffer(true);
@@ -160,6 +162,24 @@ function Chat() {
     socket.emit("end_call", { to: otherId });
   };
 
+  const requestCall = () => {
+    socket.emit("call_request", { to: otherId, from: myId });
+    setCallLoading(true);
+  };
+
+  const acceptIncomingCall = async () => {
+    socket.emit("call_response", { to: callFrom, accepted: true, from: myId });
+    setIncomingCallOffer(false);
+    setCallFrom(null);
+  };
+
+  const rejectIncomingCall = () => {
+    socket.emit("call_response", { to: callFrom, accepted: false, from: myId });
+    socket.emit("call_rejected", { to: callFrom, from: myId });
+    setIncomingCallOffer(false);
+    setCallFrom(null);
+  };
+
   // === Fetch messages ===
   useEffect(() => {
     const fetchMsgs = async () => {
@@ -208,7 +228,7 @@ function Chat() {
     return a;
   }, {});
 
-  // === Lightbox controls (for chat + preview) ===
+  // === Lightbox Controls (chat + preview) ===
   const closeLightbox = useCallback(() => setLightbox({ open: false, images: [], index: 0 }), []);
   const showPrev = useCallback(
     (e) => {
@@ -258,6 +278,12 @@ function Chat() {
             <h2 className="text-xl sm:text-2xl font-bold">
               Chat with {loadingUser ? "Loading..." : otherUser?.name || "Unknown"}
             </h2>
+            {otherUser && (
+              <p className="text-sm text-gray-300">
+                🎓 Teaches: {otherUser.teach?.join(", ") || "None"} <br />
+                📖 Learns: {otherUser.learn?.join(", ") || "None"}
+              </p>
+            )}
           </div>
           <span
             className={`ml-auto ${
@@ -344,9 +370,21 @@ function Chat() {
 
         {/* INPUT BAR */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
+          {/* 📹 Video Call */}
+          <button
+            onClick={requestCall}
+            disabled={callLoading || inCall}
+            className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full"
+            title="Start Video Call"
+          >
+            📹
+          </button>
+
+          {/* 🖼️ Image Upload */}
           <label
             htmlFor="imageUpload"
             className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full"
+            title="Upload Image"
           >
             🖼️
           </label>
@@ -357,17 +395,21 @@ function Chat() {
             onChange={handleImageChange}
             className="hidden"
           />
+
+          {/* 😀 Emoji */}
           <button
             onClick={() => setShowEmojiPicker((p) => !p)}
             className="text-xl bg-white/20 p-2 rounded-lg"
           >
             😀
           </button>
+
           {showEmojiPicker && (
             <div className="absolute z-10 bottom-20 left-4 sm:left-8">
               <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
             </div>
           )}
+
           <input
             type="text"
             value={text}
@@ -376,6 +418,7 @@ function Chat() {
             className="flex-grow p-2 rounded-md text-black"
             placeholder="Type your message..."
           />
+
           <button
             onClick={sendMessage}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
@@ -384,36 +427,78 @@ function Chat() {
           </button>
         </div>
 
-        {/* 🔍 Lightbox Zoom View */}
-        {lightbox.open && lightbox.images.length > 0 && (
-          <div
-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-            onClick={closeLightbox}
-          >
-            <img
-              src={lightbox.images[lightbox.index]}
-              alt="zoom"
-              className="max-w-full max-h-full rounded-lg border border-white"
-            />
-            {lightbox.images.length > 1 && (
-              <>
-                <button
-                  onClick={showPrev}
-                  className="absolute left-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
-                >
-                  ←
-                </button>
-                <button
-                  onClick={showNext}
-                  className="absolute right-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
-                >
-                  →
-                </button>
-              </>
-            )}
+        {/* 🎥 Video Call UI */}
+        {inCall && (
+          <div className="flex flex-col items-center mt-4">
+            <h3 className="text-lg font-semibold mb-2">🎥 Live Video Call</h3>
+            <div className="flex gap-4 flex-wrap justify-center">
+              <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
+              <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
+            </div>
+            <button onClick={endCall} className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+              End Call
+            </button>
           </div>
         )}
+
+        {/* ⭐ User Reviews */}
+        <UserReviews ratedId={otherId} />
       </div>
+
+      {/* 📞 Incoming Call Popup */}
+      {incomingCallOffer && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 text-center shadow-lg max-w-sm">
+            <h3 className="text-lg font-semibold text-black mb-2">
+              📞 Incoming call from {otherUser?.name || callFrom}
+            </h3>
+            <div className="flex justify-center gap-4 mt-4">
+              <button
+                onClick={acceptIncomingCall}
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+              >
+                Accept
+              </button>
+              <button
+                onClick={rejectIncomingCall}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔍 Lightbox Zoom View */}
+      {lightbox.open && lightbox.images.length > 0 && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+          onClick={closeLightbox}
+        >
+          <img
+            src={lightbox.images[lightbox.index]}
+            alt="zoom"
+            className="max-w-full max-h-full rounded-lg border border-white"
+          />
+          {lightbox.images.length > 1 && (
+            <>
+              <button
+                onClick={showPrev}
+                className="absolute left-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
+              >
+                ←
+              </button>
+              <button
+                onClick={showNext}
+                className="absolute right-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
+              >
+                →
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
