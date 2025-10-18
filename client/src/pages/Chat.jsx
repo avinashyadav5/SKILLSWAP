@@ -1,14 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
-import io from "socket.io-client";
 import Navbar from "../components/Navbar";
 import EmojiPicker from "emoji-picker-react";
 import UserReviews from "../components/UserReviews";
-import toast from "react-hot-toast";
 import { RTC_CONFIG } from "../utils/webrtc";
+import socket from "../utils/socket"; // ✅ Shared global socket instance
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
-const socket = io(BACKEND_URL, { transports: ["websocket", "polling"] });
+const BACKEND_URL =
+  import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
 
 function Chat() {
   const { userId } = useParams();
@@ -16,54 +15,74 @@ function Chat() {
   const myId = parseInt(me?.id);
   const otherId = parseInt(userId);
 
-  // --- State ---
+  // Chat state
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const [otherUser, setOtherUser] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [userError, setUserError] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
+  const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
+
+  // Call / WebRTC state
   const [inCall, setInCall] = useState(false);
   const [incomingCallOffer, setIncomingCallOffer] = useState(false);
   const [callFrom, setCallFrom] = useState(null);
   const [callLoading, setCallLoading] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
-  // --- Refs ---
+  // Refs
   const messagesEndRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerRef = useRef(null);
-  const screenStreamRef = useRef(null);
   const pendingCandidates = useRef([]);
 
-  // === Fetch other user info ===
+  // === Fetch User ===
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/user/${userId}`)
-      .then((res) => res.json())
-      .then(setOtherUser)
-      .catch((err) => console.error("User fetch failed:", err));
+    const fetchUser = async () => {
+      try {
+        setLoadingUser(true);
+        const res = await fetch(`${BACKEND_URL}/api/user/${userId}`);
+        if (!res.ok) throw new Error(`Failed with status ${res.status}`);
+        const data = await res.json();
+        setOtherUser(data);
+      } catch (err) {
+        console.error(err);
+        setUserError("Could not load user info");
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+    fetchUser();
   }, [userId]);
 
-  // === Socket setup ===
+  // === Socket Setup ===
   useEffect(() => {
     if (!myId) return;
     socket.emit("join_room", myId);
 
-    // Receive chat message
-    socket.on("receive_message", (msg) => {
+    // Receive messages
+    const onReceiveMessage = (msg) => {
       const sender = parseInt(msg.senderId);
       const receiver = parseInt(msg.receiverId);
       const fromSelf = sender === myId;
-      if ([sender, receiver].includes(myId) && [sender, receiver].includes(otherId)) {
-        setMessages((prev) => [...prev, { ...msg, fromSelf }]);
-      }
-    });
+      const isRelevant =
+        (sender === myId && receiver === otherId) ||
+        (sender === otherId && receiver === myId);
+      if (!isRelevant) return;
+      setMessages((prev) => {
+        if (prev.find((m) => m.id === msg.id)) return prev;
+        return [...prev, { ...msg, fromSelf, images: msg.images || [] }];
+      });
+    };
+    socket.on("receive_message", onReceiveMessage);
 
     // Online users
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
-    // === Incoming call system ===
+    // --- CALL EVENTS ---
     socket.on("call_request", ({ from }) => {
       setCallFrom(from);
       setIncomingCallOffer(true);
@@ -71,46 +90,83 @@ function Chat() {
 
     socket.on("call_response", async ({ accepted, from }) => {
       if (!accepted) {
-        toast("📞 Call was declined.", { icon: "🚫", style: { background: "#333", color: "#fff" } });
+        alert("📞 Call was declined.");
         setCallLoading(false);
         return;
       }
-      await initWebRTCConnection(from, false);
+      try {
+        await initWebRTCConnection(from, false);
+      } catch (err) {
+        console.error("Error starting call after acceptance:", err);
+        setCallLoading(false);
+      }
     });
 
     socket.on("webrtc_offer", async ({ from, offer }) => {
-      await initWebRTCConnection(from, true, offer);
+      if (!peerRef.current) {
+        try {
+          await initWebRTCConnection(from, true, offer);
+        } catch (err) {
+          console.error("Error handling incoming offer:", err);
+        }
+      } else {
+        try {
+          await peerRef.current.setRemoteDescription(
+            new RTCSessionDescription(offer)
+          );
+        } catch (err) {
+          console.error("Error setting remote description for offer:", err);
+        }
+      }
     });
 
     socket.on("webrtc_answer", async ({ answer }) => {
       if (peerRef.current) {
-        await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        while (pendingCandidates.current.length) {
-          const c = pendingCandidates.current.shift();
-          await peerRef.current.addIceCandidate(c);
+        try {
+          await peerRef.current.setRemoteDescription(
+            new RTCSessionDescription(answer)
+          );
+          while (pendingCandidates.current.length) {
+            const c = pendingCandidates.current.shift();
+            await peerRef.current.addIceCandidate(c);
+          }
+        } catch (err) {
+          console.error("Error setting remote description for answer:", err);
         }
       }
     });
 
     socket.on("webrtc_ice_candidate", async ({ candidate }) => {
       if (!peerRef.current) return;
-      const iceCandidate = new RTCIceCandidate(candidate);
-      if (peerRef.current.remoteDescription) await peerRef.current.addIceCandidate(iceCandidate);
-      else pendingCandidates.current.push(iceCandidate);
+      try {
+        const iceCandidate = new RTCIceCandidate(candidate);
+        if (
+          peerRef.current.remoteDescription &&
+          peerRef.current.remoteDescription.type
+        ) {
+          await peerRef.current.addIceCandidate(iceCandidate);
+        } else {
+          pendingCandidates.current.push(iceCandidate);
+          console.log("Queued ICE candidate until remoteDescription is set.");
+        }
+      } catch (err) {
+        console.error("Error adding ICE candidate:", err);
+      }
     });
 
     socket.on("call_rejected", () => {
-      toast("🚫 Call rejected", { style: { background: "#333", color: "#fff" } });
+      alert("📞 Call rejected by the other user.");
       setCallLoading(false);
     });
 
+    // ✅ Handle when other user ends call
     socket.on("end_call", () => {
+      console.log("📴 Remote user ended the call");
       endCall();
-      toast("📴 The other user ended the call", { icon: "📵", style: { background: "#444", color: "#fff" } });
     });
 
     return () => {
-      socket.off("receive_message");
+      socket.off("receive_message", onReceiveMessage);
       socket.off("online_users");
       socket.off("call_request");
       socket.off("call_response");
@@ -122,51 +178,57 @@ function Chat() {
     };
   }, [myId, otherId]);
 
-  // === Load message history ===
-  useEffect(() => {
-    fetch(`${BACKEND_URL}/api/messages/${myId}/${otherId}`)
-      .then((res) => res.json())
-      .then((data) =>
-        setMessages(
-          data.map((msg) => ({
-            ...msg,
-            fromSelf: parseInt(msg.senderId) === myId,
-          }))
-        )
-      )
-      .catch((err) => console.error("Message load failed:", err));
-  }, [myId, otherId]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // === WebRTC ===
-  const initWebRTCConnection = async (from, isReceiver = false, remoteOffer = null) => {
+  // === Initialize WebRTC Connection ===
+  const initWebRTCConnection = async (
+    from,
+    isReceiver = false,
+    remoteOffer = null
+  ) => {
     setInCall(true);
     setCallLoading(true);
+
+    // ✅ Stop any existing local streams
+    if (localVideoRef.current?.srcObject) {
+      localVideoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+    }
+
     peerRef.current = new RTCPeerConnection(RTC_CONFIG);
 
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
     localVideoRef.current.srcObject = stream;
-    stream.getTracks().forEach((t) => peerRef.current.addTrack(t, stream));
+    stream
+      .getTracks()
+      .forEach((track) => peerRef.current.addTrack(track, stream));
 
-    peerRef.current.ontrack = (e) => (remoteVideoRef.current.srcObject = e.streams[0]);
+    peerRef.current.ontrack = (event) => {
+      remoteVideoRef.current.srcObject = event.streams[0];
+    };
 
-    peerRef.current.onicecandidate = (e) => {
-      if (e.candidate)
+    peerRef.current.onicecandidate = (event) => {
+      if (event.candidate) {
         socket.emit("webrtc_ice_candidate", {
           to: isReceiver ? from : otherId,
-          candidate: e.candidate,
+          candidate: event.candidate,
         });
+      }
     };
 
     peerRef.current.oniceconnectionstatechange = () => {
-      if (["disconnected", "failed"].includes(peerRef.current.iceConnectionState)) endCall();
+      if (
+        peerRef.current?.iceConnectionState === "disconnected" ||
+        peerRef.current?.iceConnectionState === "failed"
+      ) {
+        endCall();
+      }
     };
 
     if (isReceiver && remoteOffer) {
-      await peerRef.current.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+      await peerRef.current.setRemoteDescription(
+        new RTCSessionDescription(remoteOffer)
+      );
       const answer = await peerRef.current.createAnswer();
       await peerRef.current.setLocalDescription(answer);
       socket.emit("webrtc_answer", { to: from, answer });
@@ -179,13 +241,32 @@ function Chat() {
     }
   };
 
-  // === Call controls ===
+  const endCall = () => {
+    try {
+      peerRef.current?.close();
+    } catch (e) {}
+    peerRef.current = null;
+    pendingCandidates.current = [];
+    setInCall(false);
+    setCallLoading(false);
+    socket.emit("end_call", { to: otherId });
+
+    if (localVideoRef.current?.srcObject) {
+      localVideoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current?.srcObject) {
+      remoteVideoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+      remoteVideoRef.current.srcObject = null;
+    }
+  };
+
   const requestCall = () => {
     socket.emit("call_request", { to: otherId, from: myId });
     setCallLoading(true);
   };
 
-  const acceptIncomingCall = () => {
+  const acceptIncomingCall = async () => {
     socket.emit("call_response", { to: callFrom, accepted: true, from: myId });
     setIncomingCallOffer(false);
     setCallFrom(null);
@@ -199,64 +280,64 @@ function Chat() {
     setCallFrom(null);
   };
 
-  const endCall = () => {
-    try {
-      peerRef.current?.close();
-    } catch {}
-    peerRef.current = null;
-    pendingCandidates.current = [];
-    setInCall(false);
-    setCallLoading(false);
-    socket.emit("end_call", { to: otherId });
+  // === Fetch messages ===
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/messages/${myId}/${otherId}`
+        );
+        const data = await res.json();
+        const formatted = data.map((msg) => ({
+          ...msg,
+          fromSelf: parseInt(msg.senderId) === myId,
+          images: msg.images || [],
+        }));
+        setMessages(formatted);
+      } catch (err) {
+        console.error("Failed to load messages:", err);
+      }
+    };
+    fetchMessages();
+  }, [myId, otherId]);
 
-    localVideoRef.current?.srcObject?.getTracks().forEach((t) => t.stop());
-    remoteVideoRef.current?.srcObject?.getTracks().forEach((t) => t.stop());
-    toast("📞 Call ended", { icon: "❌", style: { background: "#333", color: "#fff" } });
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    setSelectedImages((prev) => [...prev, ...files]);
   };
-
-  // === Screen Sharing ===
-  const startScreenShare = async () => {
-    try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      screenStreamRef.current = screenStream;
-      setIsScreenSharing(true);
-
-      const screenTrack = screenStream.getVideoTracks()[0];
-      const sender = peerRef.current.getSenders().find((s) => s.track.kind === "video");
-      if (sender) sender.replaceTrack(screenTrack);
-
-      screenTrack.onended = () => stopScreenShare();
-    } catch (err) {
-      console.error("Screen share error:", err);
-    }
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    setSelectedImages((prev) => [...prev, ...files]);
   };
+  const handleDragOver = (e) => e.preventDefault();
 
-  const stopScreenShare = async () => {
-    try {
-      const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const cameraTrack = cameraStream.getVideoTracks()[0];
-      const sender = peerRef.current.getSenders().find((s) => s.track.kind === "video");
-      if (sender) sender.replaceTrack(cameraTrack);
-
-      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
-      setIsScreenSharing(false);
-    } catch (err) {
-      console.error("Stop screen share error:", err);
-    }
-  };
-
-  // === Send message ===
   const sendMessage = async () => {
-    if (!text.trim()) return;
-    const msg = { senderId: myId, receiverId: otherId, text };
-    await fetch(`${BACKEND_URL}/api/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(msg),
-    });
-    setText("");
-    setShowEmojiPicker(false);
+    if (!text.trim() && selectedImages.length === 0) return;
+    try {
+      const formData = new FormData();
+      formData.append("senderId", myId);
+      formData.append("receiverId", otherId);
+      formData.append("text", text);
+      selectedImages.forEach((img) => formData.append("images", img));
+      await fetch(`${BACKEND_URL}/api/messages`, {
+        method: "POST",
+        body: formData,
+      });
+      setText("");
+      setSelectedImages([]);
+      setShowEmojiPicker(false);
+    } catch (err) {
+      console.error("Error sending message:", err);
+    }
   };
+
+  const onEmojiClick = (emojiData) =>
+    setText((prev) => prev + emojiData.emoji);
 
   const groupedByDate = messages.reduce((acc, msg) => {
     const date = new Date(msg.createdAt).toLocaleDateString();
@@ -265,40 +346,90 @@ function Chat() {
     return acc;
   }, {});
 
-  const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white">
       <Navbar />
-      <div className="max-w-2xl mx-auto pt-24 px-4">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">
-            Chat with {otherUser?.name || "User"}
-          </h2>
+      <div className="w-full max-w-2xl mx-auto sm:px-4 px-2 py-16">
+        {/* HEADER */}
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
+          {otherUser?.avatar && (
+            <img
+              src={
+                otherUser.avatar.startsWith("http")
+                  ? otherUser.avatar
+                  : `${BACKEND_URL}/uploads/${otherUser.avatar}`
+              }
+              alt={otherUser.name}
+              className="w-12 h-12 rounded-full"
+            />
+          )}
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold">
+              Chat with {loadingUser ? "Loading..." : otherUser?.name || "Unknown"}
+            </h2>
+            {otherUser && (
+              <p className="text-sm text-gray-300">
+                🎓 Teaches: {otherUser.teach?.join(", ") || "None"} <br />
+                📖 Learns: {otherUser.learn?.join(", ") || "None"}
+              </p>
+            )}
+          </div>
           <span
-            className={
-              onlineUsers.includes(otherId) ? "text-green-400" : "text-red-400"
-            }
+            className={`ml-auto ${
+              onlineUsers.includes(otherId)
+                ? "text-green-400"
+                : "text-red-400"
+            }`}
           >
             {onlineUsers.includes(otherId) ? "Online" : "Offline"}
           </span>
         </div>
 
-        {/* Messages */}
-        <div className="h-96 overflow-y-auto bg-white/10 p-4 rounded-lg mb-4 border border-white/20">
+        {/* CHAT BOX */}
+        <div
+          className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4"
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
           {Object.entries(groupedByDate).map(([date, msgs], idx) => (
             <div key={idx}>
-              <div className="text-center text-gray-400 text-sm my-2">📅 {date}</div>
+              <div className="text-center text-gray-400 text-sm my-2">
+                📅 {date}
+              </div>
               {msgs.map((m, i) => (
                 <div
                   key={i}
-                  className={`my-2 max-w-xs p-2 rounded-lg ${
+                  className={`my-2 max-w-[80%] sm:max-w-xs p-2 rounded-lg ${
                     m.fromSelf
                       ? "bg-green-600 text-white ml-auto text-right"
                       : "bg-gray-300 text-black mr-auto text-left"
                   }`}
                 >
-                  {m.text}
+                  {m.text && <p>{m.text}</p>}
+                  {m.images?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {m.images.map((img, idx2) => {
+                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
+                        return (
+                          <img
+                            key={idx2}
+                            src={fullUrl}
+                            alt="chat-img"
+                            className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                            onClick={() =>
+                              setLightbox({
+                                open: true,
+                                images: m.images.map(
+                                  (im) => `${BACKEND_URL}/uploads/chat/${im}`
+                                ),
+                                index: idx2,
+                              })
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -306,77 +437,92 @@ function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
-        <div className="flex gap-2 items-center mb-4 relative">
+        {/* CALL + INPUT BAR */}
+        <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
           <button
             onClick={requestCall}
             disabled={callLoading || inCall}
             className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full"
+            title="Start Video Call"
           >
             📹
           </button>
 
           <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
             className="text-xl bg-white/20 p-2 rounded-lg"
           >
             😀
           </button>
 
           {showEmojiPicker && (
-            <div className="absolute bottom-16 left-0">
+            <div className="absolute z-10 bottom-20 left-4 sm:left-8">
               <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
             </div>
           )}
+
+          <input type="file" multiple onChange={handleImageChange} />
 
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            className="flex-grow p-2 rounded text-black"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                sendMessage();
+                setShowEmojiPicker(false);
+              }
+            }}
+            className="flex-grow p-2 rounded-md text-black"
             placeholder="Type your message..."
           />
+
           <button
-            onClick={sendMessage}
-            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
+            onClick={() => {
+              sendMessage();
+              setShowEmojiPicker(false);
+            }}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
           >
             Send
           </button>
         </div>
 
-        {/* Video Call */}
+        {/* VIDEO CALL */}
         {inCall && (
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center mt-4">
             <h3 className="text-lg font-semibold mb-2">🎥 Live Video Call</h3>
             <div className="flex gap-4 flex-wrap justify-center">
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-64 h-48 bg-black rounded"
+              />
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-64 h-48 bg-black rounded"
+              />
             </div>
-            <div className="flex gap-2 mt-4">
-              {!isScreenSharing ? (
-                <button onClick={startScreenShare} className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded">
-                  🖥️ Share Screen
-                </button>
-              ) : (
-                <button onClick={stopScreenShare} className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
-                  ✖ Stop Sharing
-                </button>
-              )}
-              <button onClick={endCall} className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
-                End Call
-              </button>
-            </div>
+            <button
+              onClick={endCall}
+              className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
+            >
+              End Call
+            </button>
           </div>
         )}
 
         <UserReviews ratedId={otherId} />
       </div>
 
-      {/* Incoming Call Popup */}
+      {/* INCOMING CALL POPUP */}
       {incomingCallOffer && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 text-center shadow-lg">
+          <div className="bg-white rounded-xl p-6 text-center shadow-lg max-w-sm">
             <h3 className="text-lg font-semibold text-black mb-2">
               📞 Incoming call from {otherUser?.name || callFrom}
             </h3>
