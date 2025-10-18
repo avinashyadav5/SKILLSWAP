@@ -1,10 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import EmojiPicker from "emoji-picker-react";
 import UserReviews from "../components/UserReviews";
 import { RTC_CONFIG } from "../utils/webrtc";
-import socket from "../utils/socket"; // ✅ Shared global socket instance
+import socket from "../utils/socket";
 
 const BACKEND_URL =
   import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
@@ -15,42 +15,34 @@ function Chat() {
   const myId = parseInt(me?.id);
   const otherId = parseInt(userId);
 
-  // Chat state
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const [otherUser, setOtherUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
-  const [userError, setUserError] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedImages, setSelectedImages] = useState([]); // ✅ Image preview state
-  const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
+  const [selectedImages, setSelectedImages] = useState([]); // ✅ image previews
+  const [lightbox, setLightbox] = useState({ open: false, index: 0 }); // ✅ zoom view
 
-  // Call / WebRTC state
   const [inCall, setInCall] = useState(false);
   const [incomingCallOffer, setIncomingCallOffer] = useState(false);
   const [callFrom, setCallFrom] = useState(null);
   const [callLoading, setCallLoading] = useState(false);
 
-  // Refs
   const messagesEndRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerRef = useRef(null);
   const pendingCandidates = useRef([]);
 
-  // === Fetch User ===
+  // === Fetch user ===
   useEffect(() => {
     const fetchUser = async () => {
       try {
         setLoadingUser(true);
         const res = await fetch(`${BACKEND_URL}/api/user/${userId}`);
-        if (!res.ok) throw new Error(`Failed with status ${res.status}`);
         const data = await res.json();
         setOtherUser(data);
-      } catch (err) {
-        console.error(err);
-        setUserError("Could not load user info");
       } finally {
         setLoadingUser(false);
       }
@@ -58,31 +50,25 @@ function Chat() {
     fetchUser();
   }, [userId]);
 
-  // === Socket Setup ===
+  // === Socket setup ===
   useEffect(() => {
     if (!myId) return;
     socket.emit("join_room", myId);
 
-    // Receive messages
     const onReceiveMessage = (msg) => {
       const sender = parseInt(msg.senderId);
       const receiver = parseInt(msg.receiverId);
       const fromSelf = sender === myId;
-      const isRelevant =
+      const relevant =
         (sender === myId && receiver === otherId) ||
         (sender === otherId && receiver === myId);
-      if (!isRelevant) return;
-      setMessages((prev) => {
-        if (prev.find((m) => m.id === msg.id)) return prev;
-        return [...prev, { ...msg, fromSelf, images: msg.images || [] }];
-      });
+      if (!relevant) return;
+      setMessages((p) => [...p, { ...msg, fromSelf, images: msg.images || [] }]);
     };
-    socket.on("receive_message", onReceiveMessage);
 
-    // Online users
+    socket.on("receive_message", onReceiveMessage);
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
-    // --- CALL EVENTS ---
     socket.on("call_request", ({ from }) => {
       setCallFrom(from);
       setIncomingCallOffer(true);
@@ -94,64 +80,24 @@ function Chat() {
         setCallLoading(false);
         return;
       }
-      try {
-        await initWebRTCConnection(from, false);
-      } catch (err) {
-        console.error("Error starting call after acceptance:", err);
-        setCallLoading(false);
-      }
+      await initWebRTCConnection(from, false);
     });
 
     socket.on("webrtc_offer", async ({ from, offer }) => {
-      if (!peerRef.current) {
-        try {
-          await initWebRTCConnection(from, true, offer);
-        } catch (err) {
-          console.error("Error handling incoming offer:", err);
-        }
-      } else {
-        try {
-          await peerRef.current.setRemoteDescription(
-            new RTCSessionDescription(offer)
-          );
-        } catch (err) {
-          console.error("Error setting remote description for offer:", err);
-        }
-      }
+      await initWebRTCConnection(from, true, offer);
     });
 
     socket.on("webrtc_answer", async ({ answer }) => {
-      if (peerRef.current) {
-        try {
-          await peerRef.current.setRemoteDescription(
-            new RTCSessionDescription(answer)
-          );
-          while (pendingCandidates.current.length) {
-            const c = pendingCandidates.current.shift();
-            await peerRef.current.addIceCandidate(c);
-          }
-        } catch (err) {
-          console.error("Error setting remote description for answer:", err);
-        }
-      }
+      if (peerRef.current)
+        await peerRef.current.setRemoteDescription(
+          new RTCSessionDescription(answer)
+        );
     });
 
     socket.on("webrtc_ice_candidate", async ({ candidate }) => {
       if (!peerRef.current) return;
-      try {
-        const iceCandidate = new RTCIceCandidate(candidate);
-        if (
-          peerRef.current.remoteDescription &&
-          peerRef.current.remoteDescription.type
-        ) {
-          await peerRef.current.addIceCandidate(iceCandidate);
-        } else {
-          pendingCandidates.current.push(iceCandidate);
-          console.log("Queued ICE candidate until remoteDescription is set.");
-        }
-      } catch (err) {
-        console.error("Error adding ICE candidate:", err);
-      }
+      const ice = new RTCIceCandidate(candidate);
+      await peerRef.current.addIceCandidate(ice);
     });
 
     socket.on("call_rejected", () => {
@@ -159,10 +105,7 @@ function Chat() {
       setCallLoading(false);
     });
 
-    socket.on("end_call", () => {
-      console.log("📴 Remote user ended the call");
-      endCall();
-    });
+    socket.on("end_call", endCall);
 
     return () => {
       socket.off("receive_message", onReceiveMessage);
@@ -177,151 +120,126 @@ function Chat() {
     };
   }, [myId, otherId]);
 
-  // === Initialize WebRTC Connection ===
-  const initWebRTCConnection = async (from, isReceiver = false, remoteOffer = null) => {
+  // === WebRTC ===
+  const initWebRTCConnection = async (from, isReceiver = false, offer = null) => {
     setInCall(true);
     setCallLoading(true);
-
-    if (localVideoRef.current?.srcObject) {
-      localVideoRef.current.srcObject.getTracks().forEach((t) => t.stop());
-    }
-
     peerRef.current = new RTCPeerConnection(RTC_CONFIG);
-
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
     localVideoRef.current.srcObject = stream;
-    stream.getTracks().forEach((track) => peerRef.current.addTrack(track, stream));
-
-    peerRef.current.ontrack = (event) => {
-      remoteVideoRef.current.srcObject = event.streams[0];
-    };
-
-    peerRef.current.onicecandidate = (event) => {
-      if (event.candidate) {
+    stream.getTracks().forEach((t) => peerRef.current.addTrack(t, stream));
+    peerRef.current.ontrack = (e) => (remoteVideoRef.current.srcObject = e.streams[0]);
+    peerRef.current.onicecandidate = (e) => {
+      if (e.candidate)
         socket.emit("webrtc_ice_candidate", {
           to: isReceiver ? from : otherId,
-          candidate: event.candidate,
+          candidate: e.candidate,
         });
-      }
     };
-
-    peerRef.current.oniceconnectionstatechange = () => {
-      if (["disconnected", "failed"].includes(peerRef.current.iceConnectionState)) {
-        endCall();
-      }
-    };
-
-    if (isReceiver && remoteOffer) {
-      await peerRef.current.setRemoteDescription(new RTCSessionDescription(remoteOffer));
-      const answer = await peerRef.current.createAnswer();
-      await peerRef.current.setLocalDescription(answer);
-      socket.emit("webrtc_answer", { to: from, answer });
-      setCallLoading(false);
-    } else if (!isReceiver) {
-      const offer = await peerRef.current.createOffer();
-      await peerRef.current.setLocalDescription(offer);
-      socket.emit("webrtc_offer", { to: otherId, offer, from: myId });
-      setCallLoading(false);
+    if (isReceiver && offer) {
+      await peerRef.current.setRemoteDescription(new RTCSessionDescription(offer));
+      const ans = await peerRef.current.createAnswer();
+      await peerRef.current.setLocalDescription(ans);
+      socket.emit("webrtc_answer", { to: from, answer: ans });
+    } else {
+      const off = await peerRef.current.createOffer();
+      await peerRef.current.setLocalDescription(off);
+      socket.emit("webrtc_offer", { to: otherId, offer: off, from: myId });
     }
+    setCallLoading(false);
   };
 
   const endCall = () => {
-    try {
-      peerRef.current?.close();
-    } catch (e) {}
+    peerRef.current?.close();
     peerRef.current = null;
-    pendingCandidates.current = [];
     setInCall(false);
     setCallLoading(false);
     socket.emit("end_call", { to: otherId });
-
-    if (localVideoRef.current?.srcObject) {
-      localVideoRef.current.srcObject.getTracks().forEach((t) => t.stop());
-      localVideoRef.current.srcObject = null;
-    }
-    if (remoteVideoRef.current?.srcObject) {
-      remoteVideoRef.current.srcObject.getTracks().forEach((t) => t.stop());
-      remoteVideoRef.current.srcObject = null;
-    }
-  };
-
-  const requestCall = () => {
-    socket.emit("call_request", { to: otherId, from: myId });
-    setCallLoading(true);
-  };
-
-  const acceptIncomingCall = async () => {
-    socket.emit("call_response", { to: callFrom, accepted: true, from: myId });
-    setIncomingCallOffer(false);
-    setCallFrom(null);
-    setCallLoading(true);
-  };
-
-  const rejectIncomingCall = () => {
-    socket.emit("call_response", { to: callFrom, accepted: false, from: myId });
-    socket.emit("call_rejected", { to: callFrom, from: myId });
-    setIncomingCallOffer(false);
-    setCallFrom(null);
   };
 
   // === Fetch messages ===
   useEffect(() => {
-    const fetchMessages = async () => {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/messages/${myId}/${otherId}`);
-        const data = await res.json();
-        const formatted = data.map((msg) => ({
-          ...msg,
-          fromSelf: parseInt(msg.senderId) === myId,
-          images: msg.images || [],
-        }));
-        setMessages(formatted);
-      } catch (err) {
-        console.error("Failed to load messages:", err);
-      }
+    const fetchMsgs = async () => {
+      const res = await fetch(`${BACKEND_URL}/api/messages/${myId}/${otherId}`);
+      const data = await res.json();
+      const formatted = data.map((m) => ({
+        ...m,
+        fromSelf: parseInt(m.senderId) === myId,
+        images: m.images || [],
+      }));
+      setMessages(formatted);
     };
-    fetchMessages();
+    fetchMsgs();
   }, [myId, otherId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // === Image selection ===
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     setSelectedImages((prev) => [...prev, ...files]);
   };
 
+  const removeSelectedImage = (index) =>
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+
   const sendMessage = async () => {
     if (!text.trim() && selectedImages.length === 0) return;
-    try {
-      const formData = new FormData();
-      formData.append("senderId", myId);
-      formData.append("receiverId", otherId);
-      formData.append("text", text);
-      selectedImages.forEach((img) => formData.append("images", img));
-      await fetch(`${BACKEND_URL}/api/messages`, { method: "POST", body: formData });
-      setText("");
-      setSelectedImages([]);
-      setShowEmojiPicker(false);
-    } catch (err) {
-      console.error("Error sending message:", err);
-    }
+    const form = new FormData();
+    form.append("senderId", myId);
+    form.append("receiverId", otherId);
+    form.append("text", text);
+    selectedImages.forEach((img) => form.append("images", img));
+    await fetch(`${BACKEND_URL}/api/messages`, { method: "POST", body: form });
+    setText("");
+    setSelectedImages([]);
   };
 
-  const onEmojiClick = (emojiData) => setText((prev) => prev + emojiData.emoji);
+  const onEmojiClick = (e) => setText((p) => p + e.emoji);
 
-  const groupedByDate = messages.reduce((acc, msg) => {
-    const date = new Date(msg.createdAt).toLocaleDateString();
-    acc[date] = acc[date] || [];
-    acc[date].push(msg);
-    return acc;
+  const groupedByDate = messages.reduce((a, m) => {
+    const d = new Date(m.createdAt).toLocaleDateString();
+    (a[d] ||= []).push(m);
+    return a;
   }, {});
+
+  // === Lightbox Controls ===
+  const closeLightbox = useCallback(() => setLightbox({ open: false, index: 0 }), []);
+  const showPrev = useCallback(
+    (e) => {
+      e.stopPropagation();
+      setLightbox((prev) => ({
+        ...prev,
+        index: (prev.index - 1 + selectedImages.length) % selectedImages.length,
+      }));
+    },
+    [selectedImages.length]
+  );
+  const showNext = useCallback(
+    (e) => {
+      e.stopPropagation();
+      setLightbox((prev) => ({
+        ...prev,
+        index: (prev.index + 1) % selectedImages.length,
+      }));
+    },
+    [selectedImages.length]
+  );
+
+  useEffect(() => {
+    const handleEsc = (e) => e.key === "Escape" && closeLightbox();
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [closeLightbox]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white">
       <Navbar />
-
       <div className="w-full max-w-2xl mx-auto sm:px-4 px-2 py-16">
         {/* HEADER */}
         <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -332,7 +250,7 @@ function Chat() {
                   ? otherUser.avatar
                   : `${BACKEND_URL}/uploads/${otherUser.avatar}`
               }
-              alt={otherUser.name}
+              alt=""
               className="w-12 h-12 rounded-full"
             />
           )}
@@ -358,8 +276,8 @@ function Chat() {
 
         {/* CHAT BOX */}
         <div className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4">
-          {Object.entries(groupedByDate).map(([date, msgs], idx) => (
-            <div key={idx}>
+          {Object.entries(groupedByDate).map(([date, msgs]) => (
+            <div key={date}>
               <div className="text-center text-gray-400 text-sm my-2">📅 {date}</div>
               {msgs.map((m, i) => (
                 <div
@@ -373,17 +291,14 @@ function Chat() {
                   {m.text && <p>{m.text}</p>}
                   {m.images?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {m.images.map((img, idx2) => {
-                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
-                        return (
-                          <img
-                            key={idx2}
-                            src={fullUrl}
-                            alt="chat-img"
-                            className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
-                          />
-                        );
-                      })}
+                      {m.images.map((img, idx2) => (
+                        <img
+                          key={idx2}
+                          src={`${BACKEND_URL}/uploads/chat/${img}`}
+                          alt="chat-img"
+                          className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
@@ -393,37 +308,44 @@ function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* ✅ Selected Images Preview */}
+        {/* ✅ Selected Previews with ❌ + Zoom + Arrows */}
         {selectedImages.length > 0 && (
-          <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="flex gap-3 mb-3 flex-wrap">
             {selectedImages.map((file, idx) => (
-              <img
-                key={idx}
-                src={URL.createObjectURL(file)}
-                alt="preview"
-                className="w-16 h-16 object-cover rounded-lg border border-white/30"
-              />
+              <div key={idx} className="relative group">
+                <img
+                  src={URL.createObjectURL(file)}
+                  alt="preview"
+                  onClick={() => setLightbox({ open: true, index: idx })}
+                  className="w-16 h-16 object-cover rounded-lg border border-white/30 cursor-pointer hover:scale-105 transition"
+                />
+                <button
+                  onClick={() => removeSelectedImage(idx)}
+                  className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center hover:bg-red-700"
+                >
+                  ❌
+                </button>
+              </div>
             ))}
           </div>
         )}
 
-        {/* CALL + INPUT BAR */}
+        {/* INPUT BAR */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
-          {/* 📹 Video Call */}
           <button
-            onClick={requestCall}
+            onClick={() => {
+              socket.emit("call_request", { to: otherId, from: myId });
+              setCallLoading(true);
+            }}
             disabled={callLoading || inCall}
             className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full"
-            title="Start Video Call"
           >
             📹
           </button>
 
-          {/* 🖼️ Image Upload */}
           <label
             htmlFor="imageUpload"
             className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full"
-            title="Upload Image"
           >
             🖼️
           </label>
@@ -435,9 +357,8 @@ function Chat() {
             className="hidden"
           />
 
-          {/* 😀 Emoji Picker */}
           <button
-            onClick={() => setShowEmojiPicker((prev) => !prev)}
+            onClick={() => setShowEmojiPicker((p) => !p)}
             className="text-xl bg-white/20 p-2 rounded-lg"
           >
             😀
@@ -449,27 +370,17 @@ function Chat() {
             </div>
           )}
 
-          {/* 📝 Input */}
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                sendMessage();
-                setShowEmojiPicker(false);
-              }
-            }}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             className="flex-grow p-2 rounded-md text-black"
             placeholder="Type your message..."
           />
 
-          {/* 📤 Send */}
           <button
-            onClick={() => {
-              sendMessage();
-              setShowEmojiPicker(false);
-            }}
+            onClick={sendMessage}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
           >
             Send
@@ -515,6 +426,36 @@ function Chat() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 🔍 Lightbox Zoom View with ← → */}
+      {lightbox.open && selectedImages.length > 0 && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+          onClick={closeLightbox}
+        >
+          <img
+            src={URL.createObjectURL(selectedImages[lightbox.index])}
+            alt="zoom"
+            className="max-w-full max-h-full rounded-lg border border-white"
+          />
+          {selectedImages.length > 1 && (
+            <>
+              <button
+                onClick={showPrev}
+                className="absolute left-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
+              >
+                ←
+              </button>
+              <button
+                onClick={showNext}
+                className="absolute right-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
+              >
+                →
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
