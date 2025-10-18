@@ -1,17 +1,28 @@
-const { Rating } = require('../models/ratingModels');
-const { User } = require('../models'); 
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
+const User = require('./userModel');
 
-exports.getRatingsWithUsers = async (req, res) => {
-  try {
-    const ratings = await Rating.findAll({
-      include: [
-        { model: User, as: 'rater', attributes: ['id', 'name'] },
-        { model: User, as: 'rated', attributes: ['id', 'name'] },
-      ],
-    });
-    res.json(ratings);
-  } catch (err) {
-    console.error('Error fetching ratings:', err);
-    res.status(500).json({ error: 'Failed to fetch ratings' });
-  }
-};
+const Rating = sequelize.define('Rating', {
+  raterId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  ratedId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  stars: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: { min: 1, max: 5 },
+  },
+  review: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+});
+
+Rating.belongsTo(User, { as: 'rater', foreignKey: 'raterId' });
+Rating.belongsTo(User, { as: 'rated', foreignKey: 'ratedId' });
+
+module.exports = Rating;

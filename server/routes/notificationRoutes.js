@@ -4,19 +4,14 @@ const {
   createNotification,
   getNotifications,
   markAsRead,
+  getUnreadCount,
   toggleMute,
 } = require("../controllers/notificationController");
 
-// ✅ POST notification
 router.post("/", createNotification);
-
-// ✅ GET notifications for a user
 router.get("/:userId", getNotifications);
-
-// ✅ Mark single notification as read
 router.patch("/read/:id", markAsRead);
-
-// ✅ Toggle mute
+router.get("/unread/:userId", getUnreadCount);
 router.post("/mute/:userId", toggleMute);
 
 module.exports = router;

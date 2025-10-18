@@ -1,18 +1,16 @@
-const Notification = require('../models/notificationModel');
+// backend/controllers/notificationController.js
+const Notification = require("../models/notificationModel");
+
+let mutedUsers = new Set();
 
 // ✅ Create notification
 exports.createNotification = async (req, res) => {
   const { userId, message } = req.body;
   try {
-    const note = await Notification.create({ userId, message });
+    const note = await Notification.create({ userId, message, read: false });
 
-    // Real-time push only if user not muted
-    if (global.io) {
-      global.io.to(userId.toString()).emit("notification", {
-        id: note.id,
-        message: note.message,
-        createdAt: note.createdAt,
-      });
+    if (global.io && !mutedUsers.has(userId)) {
+      global.io.to(userId.toString()).emit("notification", note);
     }
 
     res.status(201).json(note);
@@ -22,9 +20,9 @@ exports.createNotification = async (req, res) => {
   }
 };
 
-// ✅ Get notifications for user
+// ✅ Get all notifications
 exports.getNotifications = async (req, res) => {
-  const userId = req.params.userId;
+  const { userId } = req.params;
   try {
     const notes = await Notification.findAll({
       where: { userId },
@@ -49,9 +47,19 @@ exports.markAsRead = async (req, res) => {
   }
 };
 
-// ✅ Toggle mute (server-side)
-let mutedUsers = new Set();
+// ✅ Get unread count
+exports.getUnreadCount = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const count = await Notification.count({ where: { userId, read: false } });
+    res.json({ count });
+  } catch (err) {
+    console.error("Unread count error:", err);
+    res.status(500).json({ error: "Failed to get unread count" });
+  }
+};
 
+// ✅ Toggle mute
 exports.toggleMute = (req, res) => {
   const { userId } = req.params;
   if (mutedUsers.has(userId)) {
@@ -63,5 +71,5 @@ exports.toggleMute = (req, res) => {
   }
 };
 
-// Helper for backend to check before pushing notifications
+// ✅ Helper
 exports.isMuted = (userId) => mutedUsers.has(userId.toString());

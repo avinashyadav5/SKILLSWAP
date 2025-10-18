@@ -1,10 +1,9 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import io from "socket.io-client";
+import socket from "../utils/socket";
 
 const API_URL =
   import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
-const socket = io(API_URL);
 
 function Navbar() {
   const navigate = useNavigate();
@@ -45,20 +44,37 @@ function Navbar() {
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ Real-time notifications
+  // ✅ Notification setup (fetch unread count + live updates)
   useEffect(() => {
     if (!user) return;
 
+    // Join user's room
     socket.emit("join_room", user.id);
-    socket.on(`notification-${user.id}`, () =>
-      setUnreadCount((prev) => prev + 1)
-    );
+
+    // Fetch unread count on load
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/notifications/unread/${user.id}`);
+        const data = await res.json();
+        setUnreadCount(data.count || 0);
+      } catch (err) {
+        console.error("Failed to fetch unread count:", err);
+      }
+    };
+    fetchUnread();
+
+    // Listen for live notifications
+    socket.on("notification", (note) => {
+      console.log("🔔 New notification:", note);
+      setUnreadCount((prev) => prev + 1);
+    });
 
     return () => {
-      socket.off(`notification-${user.id}`);
+      socket.off("notification");
     };
   }, [user]);
 
+  // ✅ Logout
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -84,7 +100,7 @@ function Navbar() {
           </>
         ) : (
           <>
-            {/* ✅ Admin link only for logged-in admins */}
+            {/* 👑 Admin link only for admins */}
             {isLoggedIn && user && user.isAdmin && (
               <Link to="/admin" className="hover:underline">
                 Admin
@@ -95,7 +111,7 @@ function Navbar() {
               Dashboard
             </Link>
 
-            {/* 🔔 Notifications */}
+            {/* 🔔 Notifications with badge */}
             <Link to="/notifications" className="relative hover:underline">
               🔔
               {unreadCount > 0 && (
@@ -105,7 +121,6 @@ function Navbar() {
               )}
             </Link>
 
-            {/* 🚪 Logout */}
             <button onClick={handleLogout} className="hover:underline">
               Logout
             </button>

@@ -1,7 +1,7 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/db');
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/db");
 
-const Notification = sequelize.define('Notification', {
+const Notification = sequelize.define("Notification", {
   userId: {
     type: DataTypes.INTEGER,
     allowNull: false,

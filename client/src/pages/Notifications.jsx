@@ -1,62 +1,54 @@
 import React, { useEffect, useState } from "react";
-import io from "socket.io-client";
+import socket from "../utils/socket";
 import { motion, AnimatePresence } from "framer-motion";
 import Particles from "react-tsparticles";
 import { loadSlim } from "tsparticles-slim";
 
-export default function Notification({ userId }) {
+const BACKEND_URL =
+  import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
+
+export default function Notification() {
   const [notifications, setNotifications] = useState([]);
   const [muted, setMuted] = useState(false);
-
-  // ✅ Use env variable for backend (Render + Localhost)
-  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
-  // ✅ Initialize socket with dynamic backend
-  const socket = io(BACKEND_URL, { transports: ["websocket", "polling"] });
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    if (!userId) return;
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser);
+      setUser(parsed);
+    }
+  }, []);
 
-    socket.emit("join_room", userId);
+  useEffect(() => {
+    if (!user) return;
 
-    const handleNotification = (note) => {
-      if (!muted) {
-        const formattedNote =
-          typeof note === "string"
-            ? { id: Date.now(), message: note, read: false }
-            : {
-                id: note.id || Date.now(),
-                message: note.message,
-                read: note.read || false,
-              };
+    socket.emit("join_room", user.id);
 
-        setNotifications((prev) => [formattedNote, ...prev]);
+    // Fetch notifications
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/notifications/${user.id}`);
+        const data = await res.json();
+        setNotifications(data);
+      } catch (err) {
+        console.error("Failed to fetch notifications:", err);
       }
     };
 
-    socket.on("notification", handleNotification);
+    fetchNotifications();
+
+    // Real-time new notifications
+    socket.on("notification", (note) => {
+      setNotifications((prev) => [note, ...prev]);
+    });
 
     return () => {
-      socket.off("notification", handleNotification);
+      socket.off("notification");
     };
-  }, [userId, muted]);
+  }, [user]);
 
-  // ✅ Toggle mute state (API call to backend)
-  const toggleMute = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/notifications/mute/${userId}`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Failed to toggle mute");
-      const data = await res.json();
-      setMuted(data.muted);
-    } catch (err) {
-      console.error("Mute toggle failed:", err);
-      alert("⚠️ Failed to toggle notifications mute state");
-    }
-  };
-
-  // ✅ Mark a notification as read
+  // ✅ Mark notification as read
   const markRead = async (id) => {
     try {
       await fetch(`${BACKEND_URL}/api/notifications/read/${id}`, {
@@ -70,20 +62,33 @@ export default function Notification({ userId }) {
     }
   };
 
+  // ✅ Toggle mute
+  const toggleMute = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/notifications/mute/${user.id}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      setMuted(data.muted);
+    } catch (err) {
+      console.error("Mute toggle failed:", err);
+    }
+  };
+
   return (
     <div className="relative min-h-screen text-white p-6 overflow-hidden bg-gradient-to-br from-[#1b2845] to-[#000f89]">
-      {/* Background Animation */}
+      {/* 🎆 Animated Background */}
       <Particles
         className="absolute inset-0 z-0"
         init={loadSlim}
         options={{
           background: { color: { value: "#0f172a" } },
           particles: {
-            number: { value: 70 },
+            number: { value: 60 },
             color: { value: "#00bfff" },
             links: { enable: true, color: "#ffffff", distance: 120 },
             move: { enable: true, speed: 1 },
-            shape: { type: "circle" },
             opacity: { value: 0.5 },
             size: { value: 2 },
           },
@@ -100,7 +105,6 @@ export default function Notification({ userId }) {
           🔔 Notifications
         </motion.h1>
 
-        {/* Mute Button */}
         <motion.button
           onClick={toggleMute}
           whileHover={{ scale: 1.05 }}
@@ -114,11 +118,10 @@ export default function Notification({ userId }) {
           {muted ? "🔇 Muted" : "🔔 Mute"}
         </motion.button>
 
-        {/* Notifications List */}
         <AnimatePresence>
           {notifications.length === 0 ? (
             <motion.p
-              className="text-gray-300"
+              className="text-gray-300 text-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
@@ -134,7 +137,7 @@ export default function Notification({ userId }) {
                 transition={{ duration: 0.4 }}
                 className={`px-4 py-3 mb-4 rounded-2xl shadow-lg flex justify-between items-center ${
                   n.read
-                    ? "bg-gray-600 text-gray-200"
+                    ? "bg-gray-600 text-gray-300"
                     : "bg-gradient-to-r from-blue-600 to-indigo-700 text-white"
                 }`}
               >
