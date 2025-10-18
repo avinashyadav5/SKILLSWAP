@@ -187,7 +187,6 @@ function Chat() {
     setInCall(true);
     setCallLoading(true);
 
-    // ✅ Stop any existing local streams
     if (localVideoRef.current?.srcObject) {
       localVideoRef.current.srcObject.getTracks().forEach((t) => t.stop());
     }
@@ -309,12 +308,6 @@ function Chat() {
     const files = Array.from(e.target.files);
     setSelectedImages((prev) => [...prev, ...files]);
   };
-  const handleDrop = (e) => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files);
-    setSelectedImages((prev) => [...prev, ...files]);
-  };
-  const handleDragOver = (e) => e.preventDefault();
 
   const sendMessage = async () => {
     if (!text.trim() && selectedImages.length === 0) return;
@@ -388,8 +381,6 @@ function Chat() {
         {/* CHAT BOX */}
         <div
           className="h-96 sm:h-[28rem] overflow-y-auto bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-xl border border-white/20 mb-4"
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
         >
           {Object.entries(groupedByDate).map(([date, msgs], idx) => (
             <div key={idx}>
@@ -406,30 +397,6 @@ function Chat() {
                   }`}
                 >
                   {m.text && <p>{m.text}</p>}
-                  {m.images?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {m.images.map((img, idx2) => {
-                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
-                        return (
-                          <img
-                            key={idx2}
-                            src={fullUrl}
-                            alt="chat-img"
-                            className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-md border cursor-pointer hover:opacity-80"
-                            onClick={() =>
-                              setLightbox({
-                                open: true,
-                                images: m.images.map(
-                                  (im) => `${BACKEND_URL}/uploads/chat/${im}`
-                                ),
-                                index: idx2,
-                              })
-                            }
-                          />
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -439,6 +406,7 @@ function Chat() {
 
         {/* CALL + INPUT BAR */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
+          {/* 📹 Video Call */}
           <button
             onClick={requestCall}
             disabled={callLoading || inCall}
@@ -448,6 +416,23 @@ function Chat() {
             📹
           </button>
 
+          {/* 🖼️ Image Upload */}
+          <label
+            htmlFor="imageUpload"
+            className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full"
+            title="Upload Image"
+          >
+            🖼️
+          </label>
+          <input
+            id="imageUpload"
+            type="file"
+            multiple
+            onChange={handleImageChange}
+            className="hidden"
+          />
+
+          {/* 😀 Emoji Picker */}
           <button
             onClick={() => setShowEmojiPicker((prev) => !prev)}
             className="text-xl bg-white/20 p-2 rounded-lg"
@@ -461,8 +446,7 @@ function Chat() {
             </div>
           )}
 
-          <input type="file" multiple onChange={handleImageChange} />
-
+          {/* 📝 Input */}
           <input
             type="text"
             value={text}
@@ -477,6 +461,7 @@ function Chat() {
             placeholder="Type your message..."
           />
 
+          {/* 📤 Send */}
           <button
             onClick={() => {
               sendMessage();
