@@ -10,7 +10,7 @@ router.get('/users', async (req, res) => {
 
   const token = authHeader.split(' ')[1];
   try {
-    const { userId } = jwt.verify(token, 'secret');
+    const { userId } = jwt.verify(token,  process.env.JWT_SECRET);
     const admin = await User.findByPk(userId);
     if (!admin || !admin.isAdmin) return res.status(403).json({ error: 'Forbidden' });
 

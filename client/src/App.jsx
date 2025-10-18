@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
@@ -11,7 +11,23 @@ import AdminDashboard from './pages/AdminDashboard';
 import Notifications from './pages/Notifications';
 
 function App() {
-  const user = JSON.parse(localStorage.getItem('user'));
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // ✅ Load user from localStorage only once
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) setUser(JSON.parse(storedUser));
+    setLoading(false);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen text-white text-xl bg-blue-900">
+        Loading SkillSwap...
+      </div>
+    );
+  }
 
   return (
     <Router>

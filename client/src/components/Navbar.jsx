@@ -2,8 +2,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import io from "socket.io-client";
 
-// ✅ Use environment variable or fallback
-const API_URL = import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
+const API_URL =
+  import.meta.env.VITE_API_URL || "https://skillswap-1-1iic.onrender.com";
 const socket = io(API_URL);
 
 function Navbar() {
@@ -13,7 +13,7 @@ function Navbar() {
   const [user, setUser] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // ✅ Fetch user info from localStorage every second (keeps navbar reactive)
+  // ✅ Keep Navbar reactive to login changes
   useEffect(() => {
     const updateUser = () => {
       const token = localStorage.getItem("token");
@@ -30,7 +30,11 @@ function Navbar() {
             : `${API_URL}/uploads/${parsedUser.avatar}`
         );
       } else if (parsedUser?.name) {
-        setAvatar(`https://ui-avatars.com/api/?name=${encodeURIComponent(parsedUser.name)}`);
+        setAvatar(
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            parsedUser.name
+          )}`
+        );
       } else {
         setAvatar("");
       }
@@ -46,7 +50,9 @@ function Navbar() {
     if (!user) return;
 
     socket.emit("join_room", user.id);
-    socket.on(`notification-${user.id}`, () => setUnreadCount((prev) => prev + 1));
+    socket.on(`notification-${user.id}`, () =>
+      setUnreadCount((prev) => prev + 1)
+    );
 
     return () => {
       socket.off(`notification-${user.id}`);
@@ -78,11 +84,13 @@ function Navbar() {
           </>
         ) : (
           <>
-            {user?.isAdmin && (
+            {/* ✅ Admin link only for logged-in admins */}
+            {isLoggedIn && user && user.isAdmin && (
               <Link to="/admin" className="hover:underline">
                 Admin
               </Link>
             )}
+
             <Link to="/dashboard" className="hover:underline">
               Dashboard
             </Link>
@@ -97,6 +105,7 @@ function Navbar() {
               )}
             </Link>
 
+            {/* 🚪 Logout */}
             <button onClick={handleLogout} className="hover:underline">
               Logout
             </button>
