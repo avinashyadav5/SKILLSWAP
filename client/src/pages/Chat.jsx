@@ -30,11 +30,17 @@ function Chat() {
   const [callFrom, setCallFrom] = useState(null);
   const [callLoading, setCallLoading] = useState(false);
 
+  // --- Rating State ---
+  const [showRatingForm, setShowRatingForm] = useState(false);
+  const [stars, setStars] = useState(0);
+  const [hoveredStar, setHoveredStar] = useState(0);
+  const [review, setReview] = useState("");
+  const [ratingSuccess, setRatingSuccess] = useState(false);
+
   const messagesEndRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerRef = useRef(null);
-  const pendingCandidates = useRef([]);
 
   // === Fetch user ===
   useEffect(() => {
@@ -70,7 +76,6 @@ function Chat() {
     socket.on("receive_message", onReceiveMessage);
     socket.on("online_users", (list) => setOnlineUsers(list.map(Number)));
 
-    // --- Video Call Events ---
     socket.on("call_request", ({ from }) => {
       setCallFrom(from);
       setIncomingCallOffer(true);
@@ -109,17 +114,7 @@ function Chat() {
 
     socket.on("end_call", endCall);
 
-    return () => {
-      socket.off("receive_message", onReceiveMessage);
-      socket.off("online_users");
-      socket.off("call_request");
-      socket.off("call_response");
-      socket.off("webrtc_offer");
-      socket.off("webrtc_answer");
-      socket.off("webrtc_ice_candidate");
-      socket.off("call_rejected");
-      socket.off("end_call");
-    };
+    return () => socket.off();
   }, [myId, otherId]);
 
   // === WebRTC ===
@@ -228,7 +223,29 @@ function Chat() {
     return a;
   }, {});
 
-  // === Lightbox Controls (chat + preview) ===
+  // === Rating Submit ===
+  const submitRating = async () => {
+    if (stars === 0) return alert("Please select a star rating");
+    const res = await fetch(`${BACKEND_URL}/api/rating`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        raterId: myId,
+        ratedId: otherId,
+        stars,
+        review,
+      }),
+    });
+    if (res.ok) {
+      setRatingSuccess(true);
+      setShowRatingForm(false);
+      setStars(0);
+      setReview("");
+      setTimeout(() => setRatingSuccess(false), 3000);
+    }
+  };
+
+  // === Lightbox Controls ===
   const closeLightbox = useCallback(() => setLightbox({ open: false, images: [], index: 0 }), []);
   const showPrev = useCallback(
     (e) => {
@@ -286,9 +303,7 @@ function Chat() {
             )}
           </div>
           <span
-            className={`ml-auto ${
-              onlineUsers.includes(otherId) ? "text-green-400" : "text-red-400"
-            }`}
+            className={`ml-auto ${onlineUsers.includes(otherId) ? "text-green-400" : "text-red-400"}`}
           >
             {onlineUsers.includes(otherId) ? "Online" : "Offline"}
           </span>
@@ -370,7 +385,6 @@ function Chat() {
 
         {/* INPUT BAR */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
-          {/* 📹 Video Call */}
           <button
             onClick={requestCall}
             disabled={callLoading || inCall}
@@ -380,7 +394,6 @@ function Chat() {
             📹
           </button>
 
-          {/* 🖼️ Image Upload */}
           <label
             htmlFor="imageUpload"
             className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full"
@@ -388,15 +401,8 @@ function Chat() {
           >
             🖼️
           </label>
-          <input
-            id="imageUpload"
-            type="file"
-            multiple
-            onChange={handleImageChange}
-            className="hidden"
-          />
+          <input id="imageUpload" type="file" multiple onChange={handleImageChange} className="hidden" />
 
-          {/* 😀 Emoji */}
           <button
             onClick={() => setShowEmojiPicker((p) => !p)}
             className="text-xl bg-white/20 p-2 rounded-lg"
@@ -440,6 +446,63 @@ function Chat() {
             </button>
           </div>
         )}
+
+        {/* ⭐ Rating + Review Section */}
+        <div className="bg-[#0e1a4f]/60 backdrop-blur-md border border-white/20 rounded-xl p-5 mt-8 shadow-lg">
+          {!showRatingForm && (
+            <button
+              onClick={() => setShowRatingForm(true)}
+              className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold px-5 py-2.5 rounded-lg shadow-md transition-all duration-200"
+            >
+              <span>⭐</span> Rate this user
+            </button>
+          )}
+
+          {showRatingForm && (
+            <div className="mt-3 space-y-4">
+              <div>
+                <label className="block text-white text-sm mb-2">Select Rating</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((num) => (
+                    <span
+                      key={num}
+                      onClick={() => setStars(num)}
+                      onMouseEnter={() => setHoveredStar(num)}
+                      onMouseLeave={() => setHoveredStar(0)}
+                      className={`text-3xl cursor-pointer transition-all duration-200 ${
+                        (hoveredStar || stars) >= num ? "text-yellow-400" : "text-gray-400"
+                      } hover:scale-110`}
+                    >
+                      ★
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm mb-1">Write a short review (optional)</label>
+                <textarea
+                  value={review}
+                  onChange={(e) => setReview(e.target.value)}
+                  placeholder="Type your feedback..."
+                  rows="3"
+                  className="w-full bg-white/10 text-white border border-white/30 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-yellow-400 placeholder-gray-300"
+                />
+              </div>
+
+              <button
+                onClick={submitRating}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-all"
+              >
+                Submit Rating
+              </button>
+            </div>
+          )}
+
+          {ratingSuccess && (
+            <p className="text-green-400 font-semibold mt-3">✅ Rating submitted successfully!</p>
+          )}
+        </div>
 
         {/* ⭐ User Reviews */}
         <UserReviews ratedId={otherId} />
