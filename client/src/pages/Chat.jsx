@@ -21,8 +21,8 @@ function Chat() {
   const [loadingUser, setLoadingUser] = useState(true);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedImages, setSelectedImages] = useState([]); // ✅ image previews
-  const [lightbox, setLightbox] = useState({ open: false, index: 0 }); // ✅ zoom view
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
 
   const [inCall, setInCall] = useState(false);
   const [incomingCallOffer, setIncomingCallOffer] = useState(false);
@@ -208,27 +208,27 @@ function Chat() {
     return a;
   }, {});
 
-  // === Lightbox Controls ===
-  const closeLightbox = useCallback(() => setLightbox({ open: false, index: 0 }), []);
+  // === Lightbox controls (for chat + preview) ===
+  const closeLightbox = useCallback(() => setLightbox({ open: false, images: [], index: 0 }), []);
   const showPrev = useCallback(
     (e) => {
       e.stopPropagation();
       setLightbox((prev) => ({
         ...prev,
-        index: (prev.index - 1 + selectedImages.length) % selectedImages.length,
+        index: (prev.index - 1 + prev.images.length) % prev.images.length,
       }));
     },
-    [selectedImages.length]
+    []
   );
   const showNext = useCallback(
     (e) => {
       e.stopPropagation();
       setLightbox((prev) => ({
         ...prev,
-        index: (prev.index + 1) % selectedImages.length,
+        index: (prev.index + 1) % prev.images.length,
       }));
     },
-    [selectedImages.length]
+    []
   );
 
   useEffect(() => {
@@ -258,12 +258,6 @@ function Chat() {
             <h2 className="text-xl sm:text-2xl font-bold">
               Chat with {loadingUser ? "Loading..." : otherUser?.name || "Unknown"}
             </h2>
-            {otherUser && (
-              <p className="text-sm text-gray-300">
-                🎓 Teaches: {otherUser.teach?.join(", ") || "None"} <br />
-                📖 Learns: {otherUser.learn?.join(", ") || "None"}
-              </p>
-            )}
           </div>
           <span
             className={`ml-auto ${
@@ -291,14 +285,26 @@ function Chat() {
                   {m.text && <p>{m.text}</p>}
                   {m.images?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {m.images.map((img, idx2) => (
-                        <img
-                          key={idx2}
-                          src={`${BACKEND_URL}/uploads/chat/${img}`}
-                          alt="chat-img"
-                          className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
-                        />
-                      ))}
+                      {m.images.map((img, idx2) => {
+                        const fullUrl = `${BACKEND_URL}/uploads/chat/${img}`;
+                        return (
+                          <img
+                            key={idx2}
+                            src={fullUrl}
+                            alt="chat-img"
+                            className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                            onClick={() =>
+                              setLightbox({
+                                open: true,
+                                images: m.images.map(
+                                  (im) => `${BACKEND_URL}/uploads/chat/${im}`
+                                ),
+                                index: idx2,
+                              })
+                            }
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -308,7 +314,7 @@ function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* ✅ Selected Previews with ❌ + Zoom + Arrows */}
+        {/* ✅ Selected Image Previews */}
         {selectedImages.length > 0 && (
           <div className="flex gap-3 mb-3 flex-wrap">
             {selectedImages.map((file, idx) => (
@@ -316,7 +322,13 @@ function Chat() {
                 <img
                   src={URL.createObjectURL(file)}
                   alt="preview"
-                  onClick={() => setLightbox({ open: true, index: idx })}
+                  onClick={() =>
+                    setLightbox({
+                      open: true,
+                      images: selectedImages.map((f) => URL.createObjectURL(f)),
+                      index: idx,
+                    })
+                  }
                   className="w-16 h-16 object-cover rounded-lg border border-white/30 cursor-pointer hover:scale-105 transition"
                 />
                 <button
@@ -332,17 +344,6 @@ function Chat() {
 
         {/* INPUT BAR */}
         <div className="flex flex-wrap gap-2 items-center w-full mb-4 bg-white/10 p-2 rounded-lg relative">
-          <button
-            onClick={() => {
-              socket.emit("call_request", { to: otherId, from: myId });
-              setCallLoading(true);
-            }}
-            disabled={callLoading || inCall}
-            className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full"
-          >
-            📹
-          </button>
-
           <label
             htmlFor="imageUpload"
             className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full"
@@ -356,20 +357,17 @@ function Chat() {
             onChange={handleImageChange}
             className="hidden"
           />
-
           <button
             onClick={() => setShowEmojiPicker((p) => !p)}
             className="text-xl bg-white/20 p-2 rounded-lg"
           >
             😀
           </button>
-
           {showEmojiPicker && (
             <div className="absolute z-10 bottom-20 left-4 sm:left-8">
               <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
             </div>
           )}
-
           <input
             type="text"
             value={text}
@@ -378,7 +376,6 @@ function Chat() {
             className="flex-grow p-2 rounded-md text-black"
             placeholder="Type your message..."
           />
-
           <button
             onClick={sendMessage}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
@@ -387,77 +384,36 @@ function Chat() {
           </button>
         </div>
 
-        {/* VIDEO CALL */}
-        {inCall && (
-          <div className="flex flex-col items-center mt-4">
-            <h3 className="text-lg font-semibold mb-2">🎥 Live Video Call</h3>
-            <div className="flex gap-4 flex-wrap justify-center">
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
-            </div>
-            <button onClick={endCall} className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
-              End Call
-            </button>
+        {/* 🔍 Lightbox Zoom View */}
+        {lightbox.open && lightbox.images.length > 0 && (
+          <div
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+            onClick={closeLightbox}
+          >
+            <img
+              src={lightbox.images[lightbox.index]}
+              alt="zoom"
+              className="max-w-full max-h-full rounded-lg border border-white"
+            />
+            {lightbox.images.length > 1 && (
+              <>
+                <button
+                  onClick={showPrev}
+                  className="absolute left-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={showNext}
+                  className="absolute right-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
+                >
+                  →
+                </button>
+              </>
+            )}
           </div>
         )}
-
-        <UserReviews ratedId={otherId} />
       </div>
-
-      {/* INCOMING CALL POPUP */}
-      {incomingCallOffer && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 text-center shadow-lg max-w-sm">
-            <h3 className="text-lg font-semibold text-black mb-2">
-              📞 Incoming call from {otherUser?.name || callFrom}
-            </h3>
-            <div className="flex justify-center gap-4 mt-4">
-              <button
-                onClick={acceptIncomingCall}
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-              >
-                Accept
-              </button>
-              <button
-                onClick={rejectIncomingCall}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
-              >
-                Reject
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🔍 Lightbox Zoom View with ← → */}
-      {lightbox.open && selectedImages.length > 0 && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-          onClick={closeLightbox}
-        >
-          <img
-            src={URL.createObjectURL(selectedImages[lightbox.index])}
-            alt="zoom"
-            className="max-w-full max-h-full rounded-lg border border-white"
-          />
-          {selectedImages.length > 1 && (
-            <>
-              <button
-                onClick={showPrev}
-                className="absolute left-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
-              >
-                ←
-              </button>
-              <button
-                onClick={showNext}
-                className="absolute right-5 text-white text-3xl font-bold px-3 py-2 bg-black/50 rounded-full hover:bg-black/70"
-              >
-                →
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
