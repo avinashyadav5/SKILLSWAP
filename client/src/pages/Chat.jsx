@@ -29,6 +29,8 @@ function Chat() {
   const [incomingCallOffer, setIncomingCallOffer] = useState(false);
   const [callFrom, setCallFrom] = useState(null);
   const [callLoading, setCallLoading] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCamOn, setIsCamOn] = useState(true);
 
   // --- Rating State ---
   const [showRatingForm, setShowRatingForm] = useState(false);
@@ -121,33 +123,57 @@ function Chat() {
   const initWebRTCConnection = async (from, isReceiver = false, offer = null) => {
     setInCall(true);
     setCallLoading(true);
+
     peerRef.current = new RTCPeerConnection(RTC_CONFIG);
+
+    // 🔹 Always capture local media for both caller and receiver
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
+      video: isCamOn,
+      audio: isMicOn,
     });
     localVideoRef.current.srcObject = stream;
+
+    // Save stream for toggling later
+    localVideoRef.current.stream = stream;
+
     stream.getTracks().forEach((t) => peerRef.current.addTrack(t, stream));
-    peerRef.current.ontrack = (e) => (remoteVideoRef.current.srcObject = e.streams[0]);
+
+
+    // 🔹 When remote track arrives, show it
+    peerRef.current.ontrack = (event) => {
+      const [remoteStream] = event.streams;
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+    };
+
+    // 🔹 Exchange ICE candidates
     peerRef.current.onicecandidate = (e) => {
-      if (e.candidate)
+      if (e.candidate) {
         socket.emit("webrtc_ice_candidate", {
           to: isReceiver ? from : otherId,
           candidate: e.candidate,
         });
+      }
     };
+
+    // 🔹 Receiver logic
     if (isReceiver && offer) {
       await peerRef.current.setRemoteDescription(new RTCSessionDescription(offer));
-      const ans = await peerRef.current.createAnswer();
-      await peerRef.current.setLocalDescription(ans);
-      socket.emit("webrtc_answer", { to: from, answer: ans });
-    } else {
-      const off = await peerRef.current.createOffer();
-      await peerRef.current.setLocalDescription(off);
-      socket.emit("webrtc_offer", { to: otherId, offer: off, from: myId });
+      const answer = await peerRef.current.createAnswer();
+      await peerRef.current.setLocalDescription(answer);
+      socket.emit("webrtc_answer", { to: from, answer });
     }
+    // 🔹 Caller logic
+    else {
+      const offerObj = await peerRef.current.createOffer();
+      await peerRef.current.setLocalDescription(offerObj);
+      socket.emit("webrtc_offer", { to: otherId, offer: offerObj, from: myId });
+    }
+
     setCallLoading(false);
   };
+
 
   const endCall = () => {
     peerRef.current?.close();
@@ -155,6 +181,22 @@ function Chat() {
     setInCall(false);
     setCallLoading(false);
     socket.emit("end_call", { to: otherId });
+  };
+
+  const toggleMic = () => {
+    const stream = localVideoRef.current?.srcObject;
+    if (!stream) return;
+
+    stream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
+    setIsMicOn((prev) => !prev);
+  };
+
+  const toggleCam = () => {
+    const stream = localVideoRef.current?.srcObject;
+    if (!stream) return;
+
+    stream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
+    setIsCamOn((prev) => !prev);
   };
 
   const requestCall = () => {
@@ -317,11 +359,10 @@ function Chat() {
               {msgs.map((m, i) => (
                 <div
                   key={i}
-                  className={`my-2 max-w-[80%] sm:max-w-xs p-2 rounded-lg ${
-                    m.fromSelf
-                      ? "bg-green-600 text-white ml-auto text-right"
-                      : "bg-gray-300 text-black mr-auto text-left"
-                  }`}
+                  className={`my-2 max-w-[80%] sm:max-w-xs p-2 rounded-lg ${m.fromSelf
+                    ? "bg-green-600 text-white ml-auto text-right"
+                    : "bg-gray-300 text-black mr-auto text-left"
+                    }`}
                 >
                   {m.text && <p>{m.text}</p>}
                   {m.images?.length > 0 && (
@@ -436,14 +477,53 @@ function Chat() {
         {/* 🎥 Video Call UI */}
         {inCall && (
           <div className="flex flex-col items-center mt-4">
-            <h3 className="text-lg font-semibold mb-2">🎥 Live Video Call</h3>
+            <h3 className="text-lg font-semibold mb-3">🎥 Live Video Call</h3>
+
             <div className="flex gap-4 flex-wrap justify-center">
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-64 h-48 bg-black rounded" />
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-64 h-48 bg-black rounded" />
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-64 h-48 bg-black rounded-lg border border-white/20 shadow-md"
+              />
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-64 h-48 bg-black rounded-lg border border-white/20 shadow-md"
+              />
             </div>
-            <button onClick={endCall} className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
-              End Call
-            </button>
+
+            {/* 🎛 Controls */}
+            <div className="flex gap-4 mt-5">
+              <button
+                onClick={toggleMic}
+                className={`px-5 py-2 rounded-lg font-medium transition-all ${isMicOn
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-gray-600 hover:bg-gray-700 text-white"
+                  }`}
+              >
+                {isMicOn ? "🎙 Mute Mic" : "🔇 Unmute Mic"}
+              </button>
+
+              <button
+                onClick={toggleCam}
+                className={`px-5 py-2 rounded-lg font-medium transition-all ${isCamOn
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "bg-gray-600 hover:bg-gray-700 text-white"
+                  }`}
+              >
+                {isCamOn ? "📷 Turn Off Cam" : "🚫 Turn On Cam"}
+              </button>
+
+              <button
+                onClick={endCall}
+                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
+              >
+                ❌ End Call
+              </button>
+            </div>
           </div>
         )}
 
@@ -469,9 +549,8 @@ function Chat() {
                       onClick={() => setStars(num)}
                       onMouseEnter={() => setHoveredStar(num)}
                       onMouseLeave={() => setHoveredStar(0)}
-                      className={`text-3xl cursor-pointer transition-all duration-200 ${
-                        (hoveredStar || stars) >= num ? "text-yellow-400" : "text-gray-400"
-                      } hover:scale-110`}
+                      className={`text-3xl cursor-pointer transition-all duration-200 ${(hoveredStar || stars) >= num ? "text-yellow-400" : "text-gray-400"
+                        } hover:scale-110`}
                     >
                       ★
                     </span>
