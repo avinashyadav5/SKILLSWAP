@@ -28,12 +28,7 @@ function SubjectSearch() {
 
       try {
         // (Optional) Verify subject or log search to backend
-        const res = await fetch(`${BACKEND_URL}/api/validate-subject`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subject }),
-        });
-
+        const res = await fetch(`${BACKEND_URL}/api/validate-subject/${subject}`);
         const data = await res.json();
         if (data.valid || data.success) {
           setSelected(subject.trim().toLowerCase());

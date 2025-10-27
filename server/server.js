@@ -54,12 +54,14 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const chatbotRoute = require('./routes/chatbot');
 const learningPathRoutes = require('./routes/learningPathRoutes');
 const recommendationRoutes = require('./routes/recommendationRoutes');
-const subjectsRouter = require('./routes/subjects');
+const validateSubjectRoutes = require('./routes/validateSubjectRoutes');
+//const subjectsRouter = require('./routes/subjects');
 const studyBuddyRoutes = require('./routes/studyBuddyRoutes');
 
 app.use('/api/chatbot', chatbotRoute);
 app.use('/api/learning-path', learningPathRoutes);
-app.use('/api/subjects', subjectsRouter);
+//app.use('/api/subjects', subjectsRouter);
+app.use('/api/validate-subject', validateSubjectRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/user', userRoutes);
