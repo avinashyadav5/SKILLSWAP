@@ -121,83 +121,112 @@ function Chat() {
 
   // === WebRTC ===
   const initWebRTCConnection = async (from, isReceiver = false, offer = null) => {
-    setInCall(true);
-    setCallLoading(true);
+    try {
+      console.log("initWebRTCConnection ->", { from, isReceiver, offerExists: !!offer });
+      setInCall(true);
+      setCallLoading(true);
 
-    peerRef.current = new RTCPeerConnection(RTC_CONFIG);
-
-    // 🔹 Always capture local media for both caller and receiver
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: isCamOn,
-      audio: isMicOn,
-    });
-    localVideoRef.current.srcObject = stream;
-
-    // Save stream for toggling later
-    localVideoRef.current.stream = stream;
-
-    stream.getTracks().forEach((t) => peerRef.current.addTrack(t, stream));
-
-
-    // 🔹 When remote track arrives, show it
-    peerRef.current.ontrack = (event) => {
-      const [remoteStream] = event.streams;
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStream;
+      // close previous if any
+      if (peerRef.current) {
+        try { peerRef.current.close(); } catch { }
+        peerRef.current = null;
       }
-    };
 
-    // 🔹 Exchange ICE candidates
-    peerRef.current.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.emit("webrtc_ice_candidate", {
-          to: isReceiver ? from : otherId,
-          candidate: e.candidate,
-        });
+      const pc = new RTCPeerConnection(RTC_CONFIG);
+      peerRef.current = pc;
+
+      // --- Debug helpers ---
+      pc.onconnectionstatechange = () => console.log("PC state:", pc.connectionState);
+      pc.oniceconnectionstatechange = () => console.log("ICE state:", pc.iceConnectionState);
+
+      // --- Robust remote track handling ---
+      pc.ontrack = (event) => {
+        console.log("ontrack event:", event);
+        // prefer provided streams array
+        let remoteStream = event.streams && event.streams[0];
+        if (!remoteStream) {
+          // some browsers deliver single track instead of streams
+          remoteStream = remoteVideoRef.current?.srcObject || new MediaStream();
+          if (event.track) remoteStream.addTrack(event.track);
+        }
+        // attach to video element
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          // attempt to play (autoplay may require user gesture)
+          remoteVideoRef.current.play().catch((err) => {
+            console.warn("remoteVideo play() blocked:", err);
+          });
+        }
+      };
+
+      // --- ICE candidate send ---
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          console.log("Sending ICE candidate ->", e.candidate);
+          socket.emit("webrtc_ice_candidate", {
+            to: isReceiver ? from : otherId,
+            candidate: e.candidate,
+          });
+        }
+      };
+
+      // --- get local media AFTER pc created (so addTrack works immediately) ---
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true, // always capture video; toggle later with enabled flags
+        audio: true,
+      });
+
+      // attach local preview
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => { });
+        // store to toggle mic/cam later
+        localVideoRef.current._localStream = stream;
       }
-    };
 
-    // 🔹 Receiver logic
-    if (isReceiver && offer) {
-      await peerRef.current.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerRef.current.createAnswer();
-      await peerRef.current.setLocalDescription(answer);
-      socket.emit("webrtc_answer", { to: from, answer });
+      // add tracks to connection
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+
+      // --- If we are receiver (got an offer) ---
+      if (isReceiver && offer) {
+        console.log("Receiver: setRemoteDescription(offer)");
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        console.log("Receiver: sending answer");
+        socket.emit("webrtc_answer", { to: from, answer });
+      } else {
+        // caller: create offer and send it
+        console.log("Caller: creating offer");
+        const offerObj = await pc.createOffer();
+        await pc.setLocalDescription(offerObj);
+        console.log("Caller: sending offer");
+        socket.emit("webrtc_offer", { to: otherId, offer: offerObj, from: myId });
+      }
+
+      setCallLoading(false);
+    } catch (err) {
+      console.error("initWebRTCConnection error:", err);
+      setCallLoading(false);
+      setInCall(false);
     }
-    // 🔹 Caller logic
-    else {
-      const offerObj = await peerRef.current.createOffer();
-      await peerRef.current.setLocalDescription(offerObj);
-      socket.emit("webrtc_offer", { to: otherId, offer: offerObj, from: myId });
-    }
-
-    setCallLoading(false);
-  };
-
-
-  const endCall = () => {
-    peerRef.current?.close();
-    peerRef.current = null;
-    setInCall(false);
-    setCallLoading(false);
-    socket.emit("end_call", { to: otherId });
   };
 
   const toggleMic = () => {
-    const stream = localVideoRef.current?.srcObject;
+    const stream = localVideoRef.current?.srcObject || localVideoRef.current?._localStream;
     if (!stream) return;
-
-    stream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
-    setIsMicOn((prev) => !prev);
+    stream.getAudioTracks().forEach((t) => (t.enabled = !t.enabled));
+    setIsMicOn((p) => !p);
   };
 
   const toggleCam = () => {
-    const stream = localVideoRef.current?.srcObject;
+    const stream = localVideoRef.current?.srcObject || localVideoRef.current?._localStream;
     if (!stream) return;
-
-    stream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
-    setIsCamOn((prev) => !prev);
+    stream.getVideoTracks().forEach((t) => (t.enabled = !t.enabled));
+    setIsCamOn((p) => !p);
   };
+
 
   const requestCall = () => {
     socket.emit("call_request", { to: otherId, from: myId });
@@ -205,10 +234,13 @@ function Chat() {
   };
 
   const acceptIncomingCall = async () => {
+    // respond to caller: this triggers the caller to init connection (and will send offer)
     socket.emit("call_response", { to: callFrom, accepted: true, from: myId });
     setIncomingCallOffer(false);
     setCallFrom(null);
+    // the actual WebRTC flow will be started when you receive `webrtc_offer` (we already listen for it)
   };
+
 
   const rejectIncomingCall = () => {
     socket.emit("call_response", { to: callFrom, accepted: false, from: myId });
@@ -216,6 +248,47 @@ function Chat() {
     setIncomingCallOffer(false);
     setCallFrom(null);
   };
+
+  // === End Call ===
+  const endCall = () => {
+    try {
+      // Close PeerConnection
+      if (peerRef.current) {
+        peerRef.current.close();
+        peerRef.current = null;
+      }
+
+      // Stop local media tracks
+      const localStream = localVideoRef.current?.srcObject;
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+
+      // Clear video elements
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+      }
+
+      // Inform the other peer if needed
+      if (socket && otherId) {
+        socket.emit("webrtc_end_call", { to: otherId, from: myId });
+      }
+
+      // Reset UI states
+      setInCall(false);
+      setIsMicOn(true);
+      setIsCamOn(true);
+      setCallLoading(false);
+
+      console.log("Call ended successfully.");
+    } catch (err) {
+      console.error("Error while ending call:", err);
+    }
+  };
+
 
   // === Fetch messages ===
   useEffect(() => {
@@ -500,8 +573,8 @@ function Chat() {
               <button
                 onClick={toggleMic}
                 className={`px-5 py-2 rounded-lg font-medium transition-all ${isMicOn
-                    ? "bg-green-600 hover:bg-green-700 text-white"
-                    : "bg-gray-600 hover:bg-gray-700 text-white"
+                  ? "bg-green-600 hover:bg-green-700 text-white"
+                  : "bg-gray-600 hover:bg-gray-700 text-white"
                   }`}
               >
                 {isMicOn ? "🎙 Mute Mic" : "🔇 Unmute Mic"}
@@ -510,8 +583,8 @@ function Chat() {
               <button
                 onClick={toggleCam}
                 className={`px-5 py-2 rounded-lg font-medium transition-all ${isCamOn
-                    ? "bg-blue-600 hover:bg-blue-700 text-white"
-                    : "bg-gray-600 hover:bg-gray-700 text-white"
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-gray-600 hover:bg-gray-700 text-white"
                   }`}
               >
                 {isCamOn ? "📷 Turn Off Cam" : "🚫 Turn On Cam"}

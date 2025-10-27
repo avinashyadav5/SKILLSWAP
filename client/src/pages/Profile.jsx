@@ -17,10 +17,7 @@ function Profile() {
   const [newTeachSubject, setNewTeachSubject] = useState('');
   const [newLearnSubject, setNewLearnSubject] = useState('');
 
-  // ✅ Backend URL from .env
-  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
-  // ✅ Normalize avatar URL
+  // ✅ Utility: normalize avatar URL
   const normalizeAvatarUrl = (avatar, name = "P") => {
     if (!avatar) {
       return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
@@ -28,17 +25,15 @@ function Profile() {
     if (avatar.startsWith("http")) {
       return avatar;
     }
-    if (avatar.startsWith("/uploads") || avatar.includes("uploads/")) {
-      return `${BACKEND_URL}/${avatar.replace(/^\//, '')}`;
-    }
-    return `${BACKEND_URL}/uploads/${avatar}`;
+    return `http://localhost:5000/uploads/${avatar}`;
   };
 
   useEffect(() => {
     if (user) {
       setAvatarPreview(normalizeAvatarUrl(user.avatar, user.name));
 
-      fetch(`${BACKEND_URL}/api/user/${user.id}/subjects`)
+      // Fetch subjects
+      fetch(`http://localhost:5000/api/user/${user.id}/subjects`)
         .then(res => res.json())
         .then(data => {
           setTeachSubjects(data.teachSubjects || []);
@@ -51,15 +46,15 @@ function Profile() {
     const file = e.target.files[0];
     if (!file) return;
     setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file)); // instant local preview
+    setAvatarPreview(URL.createObjectURL(file)); // instant preview
   };
 
   const handleUpload = async () => {
-    if (!avatarFile) return alert("Please select a file first.");
+    if (!avatarFile) return;
     const formData = new FormData();
     formData.append('avatar', avatarFile);
 
-    const res = await fetch(`${BACKEND_URL}/api/user/avatar/${user.id}`, {
+    const res = await fetch(`http://localhost:5000/api/user/avatar/${user.id}`, {
       method: 'POST',
       body: formData,
     });
@@ -69,15 +64,13 @@ function Profile() {
       const updatedUser = { ...user, avatar: data.avatar };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
-      setAvatarPreview(normalizeAvatarUrl(data.avatar));
+      setAvatarPreview(normalizeAvatarUrl(data.avatar, updatedUser.name));
       alert('✅ Avatar uploaded!');
-    } else {
-      alert('❌ Avatar upload failed');
     }
   };
 
   const handleRemoveAvatar = async () => {
-    const res = await fetch(`${BACKEND_URL}/api/user/avatar/${user.id}`, {
+    const res = await fetch(`http://localhost:5000/api/user/avatar/${user.id}`, {
       method: 'DELETE',
     });
     if (res.ok) {
@@ -92,7 +85,7 @@ function Profile() {
   };
 
   const handleUpdateProfile = async () => {
-    const res = await fetch(`${BACKEND_URL}/api/user/${user.id}`, {
+    const res = await fetch(`http://localhost:5000/api/user/${user.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -107,18 +100,18 @@ function Profile() {
   const handleAddTeach = async () => {
     const subjectName = newTeachSubject.trim();
     if (!subjectName) return alert('Please enter a subject name.');
-    await fetch(`${BACKEND_URL}/api/user/${user.id}/teach`, {
+    await fetch(`http://localhost:5000/api/user/${user.id}/teach`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subjectName }),
     });
-    const updatedSubjects = await fetch(`${BACKEND_URL}/api/user/${user.id}/subjects`).then(res => res.json());
+    const updatedSubjects = await fetch(`http://localhost:5000/api/user/${user.id}/subjects`).then(res => res.json());
     setTeachSubjects(updatedSubjects.teachSubjects || []);
     setNewTeachSubject('');
   };
 
   const handleRemoveTeach = async (subjectName) => {
-    await fetch(`${BACKEND_URL}/api/user/${user.id}/teach/${encodeURIComponent(subjectName)}`, {
+    await fetch(`http://localhost:5000/api/user/${user.id}/teach/${encodeURIComponent(subjectName)}`, {
       method: 'DELETE'
     });
     setTeachSubjects(teachSubjects.filter(s => s !== subjectName));
@@ -127,46 +120,33 @@ function Profile() {
   const handleAddLearn = async () => {
     const subjectName = newLearnSubject.trim();
     if (!subjectName) return alert('Please enter a subject name.');
-    await fetch(`${BACKEND_URL}/api/user/${user.id}/learn`, {
+    await fetch(`http://localhost:5000/api/user/${user.id}/learn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subjectName }),
     });
-    const updatedSubjects = await fetch(`${BACKEND_URL}/api/user/${user.id}/subjects`).then(res => res.json());
+    const updatedSubjects = await fetch(`http://localhost:5000/api/user/${user.id}/subjects`).then(res => res.json());
     setLearnSubjects(updatedSubjects.learnSubjects || []);
     setNewLearnSubject('');
   };
 
   const handleRemoveLearn = async (subjectName) => {
-    await fetch(`${BACKEND_URL}/api/user/${user.id}/learn/${encodeURIComponent(subjectName)}`, {
+    await fetch(`http://localhost:5000/api/user/${user.id}/learn/${encodeURIComponent(subjectName)}`, {
       method: 'DELETE'
     });
     setLearnSubjects(learnSubjects.filter(s => s !== subjectName));
   };
 
-  // ---- DEBUG ----
-  console.log("🧩 Avatar preview value:", avatarPreview);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white p-6 pt-24 flex flex-col items-center">
       <h1 className="text-3xl font-bold mb-6">Your Profile</h1>
 
-      {/* ---- Avatar Preview Section ---- */}
       <div className="mt-2 flex flex-col items-center">
-        {avatarPreview ? (
-          <img
-            src={avatarPreview}
-            alt="User Avatar"
-            className="w-32 h-32 rounded-full object-cover border-4 border-white"
-          />
-        ) : (
-          <img
-            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'U')}`}
-            alt="Default Avatar"
-            className="w-32 h-32 rounded-full object-cover border-4 border-white"
-          />
-        )}
-
+        <img
+          src={avatarPreview}
+          alt="Avatar Preview"
+          className="w-32 h-32 rounded-full object-cover border-4 border-white"
+        />
         {user?.avatar && (
           <button
             onClick={handleRemoveAvatar}
