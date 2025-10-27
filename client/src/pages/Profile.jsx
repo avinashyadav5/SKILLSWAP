@@ -20,13 +20,16 @@ function Profile() {
   // ✅ Backend URL from .env
   const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-  // ✅ Utility: normalize avatar URL
+  // ✅ Normalize avatar URL
   const normalizeAvatarUrl = (avatar, name = "P") => {
     if (!avatar) {
       return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
     }
     if (avatar.startsWith("http")) {
       return avatar;
+    }
+    if (avatar.startsWith("/uploads") || avatar.includes("uploads/")) {
+      return `${BACKEND_URL}/${avatar.replace(/^\//, '')}`;
     }
     return `${BACKEND_URL}/uploads/${avatar}`;
   };
@@ -35,7 +38,6 @@ function Profile() {
     if (user) {
       setAvatarPreview(normalizeAvatarUrl(user.avatar, user.name));
 
-      // Fetch subjects
       fetch(`${BACKEND_URL}/api/user/${user.id}/subjects`)
         .then(res => res.json())
         .then(data => {
@@ -49,11 +51,11 @@ function Profile() {
     const file = e.target.files[0];
     if (!file) return;
     setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file)); // instant preview
+    setAvatarPreview(URL.createObjectURL(file)); // instant local preview
   };
 
   const handleUpload = async () => {
-    if (!avatarFile) return;
+    if (!avatarFile) return alert("Please select a file first.");
     const formData = new FormData();
     formData.append('avatar', avatarFile);
 
@@ -67,8 +69,10 @@ function Profile() {
       const updatedUser = { ...user, avatar: data.avatar };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
-      setAvatarPreview(normalizeAvatarUrl(data.avatar, updatedUser.name));
+      setAvatarPreview(normalizeAvatarUrl(data.avatar));
       alert('✅ Avatar uploaded!');
+    } else {
+      alert('❌ Avatar upload failed');
     }
   };
 
@@ -140,16 +144,29 @@ function Profile() {
     setLearnSubjects(learnSubjects.filter(s => s !== subjectName));
   };
 
+  // ---- DEBUG ----
+  console.log("🧩 Avatar preview value:", avatarPreview);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1b2845] to-[#000f89] text-white p-6 pt-24 flex flex-col items-center">
       <h1 className="text-3xl font-bold mb-6">Your Profile</h1>
 
+      {/* ---- Avatar Preview Section ---- */}
       <div className="mt-2 flex flex-col items-center">
-        <img
-          src={avatarPreview}
-          alt="Avatar Preview"
-          className="w-32 h-32 rounded-full object-cover border-4 border-white"
-        />
+        {avatarPreview ? (
+          <img
+            src={avatarPreview}
+            alt="User Avatar"
+            className="w-32 h-32 rounded-full object-cover border-4 border-white"
+          />
+        ) : (
+          <img
+            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'U')}`}
+            alt="Default Avatar"
+            className="w-32 h-32 rounded-full object-cover border-4 border-white"
+          />
+        )}
+
         {user?.avatar && (
           <button
             onClick={handleRemoveAvatar}
