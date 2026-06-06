@@ -15,9 +15,9 @@ function Register() {
 
   const appendSubject = (field, subject) => {
     setForm(prev => {
-        const current = prev[field].trim();
-        const separator = current && !current.endsWith(',') ? ', ' : '';
-        return { ...prev, [field]: current + separator + subject };
+      const current = prev[field].trim();
+      const separator = current && !current.endsWith(',') ? ', ' : '';
+      return { ...prev, [field]: current + separator + subject };
     });
   };
 
@@ -49,7 +49,7 @@ function Register() {
       console.error('Registration error:', err);
       alert(err.response?.data?.error || '❌ Registration failed');
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -88,11 +88,10 @@ function Register() {
               <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Email Address</label>
               <input
                 type="email"
-                placeholder="you@example.com"
+                placeholder="you@gmail.com"
                 value={form.email}
-                className={`w-full px-4 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all ${
-                  form.email && !isValidEmail(form.email) ? "border-red-500/50 focus:ring-red-500" : "border-white/10"
-                }`}
+                className={`w-full px-4 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all ${form.email && !isValidEmail(form.email) ? "border-red-500/50 focus:ring-red-500" : "border-white/10"
+                  }`}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 required
               />
