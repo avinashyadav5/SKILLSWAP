@@ -37,44 +37,82 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen mt-10 bg-white dark:bg-gray-900 text-gray-800 dark:text-white">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#0f172a] text-white flex flex-col justify-between relative overflow-hidden">
       <Navbar />
 
-      <div className="flex flex-col items-center justify-center py-12 px-4">
-        <h1 className="text-3xl font-bold mb-6">Login</h1>
+      {/* Decorative Glowing Blobs */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="w-full max-w-md bg-white dark:bg-gray-800 shadow-md rounded-lg p-6 space-y-4"
-        >
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full px-4 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            required
-          />
+      <div className="flex-grow flex flex-col items-center justify-center py-20 px-4 z-10">
+        <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 space-y-6">
+          <div className="text-center">
+            <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-400 via-indigo-400 to-purple-400">
+              Welcome Back
+            </h1>
+            <p className="mt-2 text-sm text-gray-400">
+              Log in to continue swapping skills
+            </p>
+          </div>
 
-          <input
-            type="password"
-            placeholder="Password"
-            className="w-full px-4 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            required
-          />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Email Address</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                required
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full py-2 rounded-md transition ${
-              loading
-                ? "bg-gray-500 cursor-not-allowed"
-                : "bg-indigo-600 hover:bg-indigo-700 text-white"
-            }`}
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Password</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-3 rounded-xl font-semibold tracking-wide shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 ${
+                loading
+                  ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white shadow-indigo-500/20"
+              }`}
+            >
+              {loading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <span>Logging in...</span>
+                </div>
+              ) : (
+                "Log In"
+              )}
+            </button>
+          </form>
+
+          <div className="text-center pt-2">
+            <p className="text-sm text-gray-400">
+              Don't have an account?{" "}
+              <span
+                onClick={() => navigate("/register")}
+                className="text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer transition-colors"
+              >
+                Sign up
+              </span>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="py-4 text-center text-xs text-gray-500 border-t border-white/5">
+        &copy; {new Date().getFullYear()} SkillSwap. All rights reserved.
       </div>
     </div>
   );

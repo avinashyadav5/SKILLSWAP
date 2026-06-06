@@ -54,83 +54,136 @@ function Register() {
   };
 
   return (
-    <div className="min-h-screen mt-10 bg-white dark:bg-gray-900 text-gray-800 dark:text-white">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#0f172a] text-white flex flex-col justify-between relative overflow-hidden">
       <Navbar />
-      <div className="flex flex-col items-center justify-center py-12 px-4">
-        <h1 className="text-3xl font-bold mb-6">Create Your Account</h1>
 
-        <form
-          onSubmit={handleSubmit}
-          className="w-full max-w-md bg-white dark:bg-gray-800 shadow-md rounded-lg p-6 space-y-4"
-        >
-          <input
-            type="text"
-            placeholder="Name"
-            className="w-full px-4 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-          />
+      {/* Decorative Glowing Blobs */}
+      <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={form.email}
-            className={`w-full px-4 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 ${
-              form.email && !isValidEmail(form.email) ? 'border-red-500' : ''
-            }`}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            required
-          />
-          {form.email && !isValidEmail(form.email) && (
-            <p className="text-red-500 text-sm">⚠️ Invalid email format</p>
-          )}
+      <div className="flex-grow flex flex-col items-center justify-center py-20 px-4 z-10">
+        <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 space-y-6">
+          <div className="text-center">
+            <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-400 via-indigo-400 to-purple-400">
+              Create Account
+            </h1>
+            <p className="mt-2 text-sm text-gray-400">
+              Join the community of reciprocal learning
+            </p>
+          </div>
 
-          <input
-            type="password"
-            placeholder="Password (min 6 chars)"
-            className="w-full px-4 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            required
-          />
-
-          <div>
-            <input
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Full Name</label>
+              <input
                 type="text"
-                placeholder="Teach (comma-separated, e.g. Java, HTML)"
-                className="w-full px-4 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 mb-2"
+                placeholder="John Doe"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Email Address</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={form.email}
+                className={`w-full px-4 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all ${
+                  form.email && !isValidEmail(form.email) ? "border-red-500/50 focus:ring-red-500" : "border-white/10"
+                }`}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                required
+              />
+              {form.email && !isValidEmail(form.email) && (
+                <p className="text-red-400 text-xs mt-1">⚠️ Invalid email format</p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Password</label>
+              <input
+                type="password"
+                placeholder="Min. 6 characters"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Skills I Can Teach</label>
+              <input
+                type="text"
+                placeholder="e.g. Python, Java, Graphic Design"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 value={form.teach}
                 onChange={(e) => setForm({ ...form, teach: e.target.value })}
-            />
-            <div className="flex flex-wrap gap-1.5">
-                {SUGGESTIONS.map(s => (
-                    <span key={s} onClick={() => appendSubject('teach', s)} className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 px-2 py-1 rounded-md cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-800 transition">+{s}</span>
+              />
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {SUGGESTIONS.map((s) => (
+                  <span
+                    key={s}
+                    onClick={() => appendSubject("teach", s)}
+                    className="text-xs bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-1 rounded-lg cursor-pointer hover:bg-indigo-500/20 transition-all"
+                  >
+                    +{s}
+                  </span>
                 ))}
+              </div>
             </div>
-          </div>
 
-          <div>
-            <input
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-gray-400 tracking-wider uppercase">Skills I Want To Learn</label>
+              <input
                 type="text"
-                placeholder="Learn (comma-separated, e.g. React, Python)"
-                className="w-full px-4 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 mb-2"
+                placeholder="e.g. React, UI Design, Guitar"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 value={form.learn}
                 onChange={(e) => setForm({ ...form, learn: e.target.value })}
-            />
-            <div className="flex flex-wrap gap-1.5">
-                {SUGGESTIONS.map(s => (
-                    <span key={s} onClick={() => appendSubject('learn', s)} className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 px-2 py-1 rounded-md cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-800 transition">+{s}</span>
+              />
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {SUGGESTIONS.map((s) => (
+                  <span
+                    key={s}
+                    onClick={() => appendSubject("learn", s)}
+                    className="text-xs bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-1 rounded-lg cursor-pointer hover:bg-purple-500/20 transition-all"
+                  >
+                    +{s}
+                  </span>
                 ))}
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700 transition flex justify-center disabled:opacity-50"
-          >
-            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Register'}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-semibold tracking-wide py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex justify-center disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                "Sign Up"
+              )}
+            </button>
+          </form>
+
+          <div className="text-center pt-2">
+            <p className="text-sm text-gray-400">
+              Already have an account?{" "}
+              <span
+                onClick={() => navigate("/login")}
+                className="text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer transition-colors"
+              >
+                Log in
+              </span>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="py-4 text-center text-xs text-gray-500 border-t border-white/5">
+        &copy; {new Date().getFullYear()} SkillSwap. All rights reserved.
       </div>
     </div>
   );
