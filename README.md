@@ -6,7 +6,7 @@
 
 ## 🔗 Live Demo
 
-- **Frontend:** [skillswap-nine-beta.vercel.app](https://skillswap-nine-beta.vercel.app/)
+- **Frontend:** [skillswap-dev.vercel.app](https://skillswap-dev.vercel.app/)
 - **Backend:** [skillswap-1-1iic.onrender.com](https://skillswap-1-1iic.onrender.com)
 - **GitHub Repo:** [github.com/avinashyadav5/SKILLSWAP](https://github.com/avinashyadav5/SKILLSWAP)
 

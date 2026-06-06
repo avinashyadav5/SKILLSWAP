@@ -17,7 +17,7 @@ const FRONTEND_ORIGINS =
   (process.env.FRONTEND_ORIGINS &&
     process.env.FRONTEND_ORIGINS.split(',').map((s) => s.trim())) || [
     'http://localhost:5173',
-    'https://skillswap-nine-beta.vercel.app',
+    'https://skillswap-dev.vercel.app',
     // add any other deployed frontend URLs here
   ];
 
